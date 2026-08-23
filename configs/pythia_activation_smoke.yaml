@@ -1,0 +1,83 @@
+name: pythia_activation_smoke
+runner: experiments.frozen_probe_transfer_baseline:run
+seed: 42
+data_seeds: [42, 137]
+deterministic: true
+stage: extract_activations
+training: false
+
+models:
+  pythia_410m:
+    backend: huggingface
+    id: EleutherAI/pythia-410m
+    revision: 9879c9b5f8bea9051dcb0e68dff21493d67e9d4f
+    layers: 24
+    hidden_size: 1024
+    role: engineering_control
+
+dataset:
+  backend: huggingface
+  id: allenai/wildguardmix
+  revision: d29c47f41c8b51348b5c8e8c81c039b3132b66d1
+  train: { subset: wildguardtrain, split: train }
+  test: { subset: wildguardtest, split: test }
+  prompt_field: prompt
+  label_field: prompt_harm_label
+  positive_label: harmful
+  negative_label: unharmful
+  adversarial_field: adversarial
+
+sampling:
+  train_size: 12000
+  validation_size: 2000
+  balance_labels: true
+  stratify_by: [adversarial]
+  protect_test: true
+
+activations:
+  prompt_format: raw
+  token_position: last_non_padding
+  max_length: 512
+  max_truncation_rate: 0.05
+  normalized_depths: [0.25, 0.50, 0.75, 1.00]
+  primary_depth: 0.75
+  dtype: float16
+  storage_dtype: float16
+  batch_size: 32
+
+extraction:
+  mode: smoke
+  seed: 42
+  sample_size: 100
+  repeatability_rows: 8
+  repeatability_atol: 0.0001
+  models: [pythia_410m]
+
+evaluation:
+  primary_metrics: [auroc]
+  secondary_metrics:
+    - auprc
+    - accuracy
+    - balanced_accuracy
+    - precision
+    - recall
+    - f1
+    - expected_calibration_error
+    - tn
+    - fp
+    - fn
+    - tp
+    - tpr_at_fpr
+    - achieved_fpr_at_source_threshold
+  retain_row_level: [row_id, label, score, probability, prediction]
+  retain_thresholds: true
+  operating_fprs: [0.01, 0.05]
+  threshold_selection: source_validation_balanced_accuracy
+
+tracking:
+  wandb: false
+
+artifacts:
+  backend: huggingface_bucket
+  bucket: baimamboukar/coordinate-concept-mismatch
+  prefix: experiments/pythia_activation_smoke

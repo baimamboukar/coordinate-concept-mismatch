@@ -128,5 +128,5 @@ tracking:
 
 artifacts:
   backend: huggingface_bucket
-  bucket: baimamboukar/coordinate-conncep-mismatch
+  bucket: baimamboukar/coordinate-concept-mismatch
   prefix: experiments/frozen_probe_transfer_baseline

@@ -70,7 +70,18 @@ def test_baseline_config_uses_qwen_and_pinned_resources() -> None:
     assert config["data_seeds"] == [42, 137]
     assert config["stage"] == "extract_activations"
     assert config["extraction"]["sample_size"] == 100
-    assert config["artifacts"]["bucket"] == "baimamboukar/coordinate-conncep-mismatch"
+    assert config["artifacts"]["bucket"] == "baimamboukar/coordinate-concept-mismatch"
+    _validate_config(config)
+
+
+def test_pythia_smoke_config_is_pinned_and_valid() -> None:
+    config = load_config(CONFIGS_DIR / "pythia_activation_smoke.yaml")
+
+    model = config["models"]["pythia_410m"]
+    assert model["id"] == "EleutherAI/pythia-410m"
+    assert model["revision"] == "9879c9b5f8bea9051dcb0e68dff21493d67e9d4f"
+    assert (model["layers"], model["hidden_size"]) == (24, 1024)
+    assert config["extraction"]["models"] == ["pythia_410m"]
     _validate_config(config)
 
 

@@ -226,8 +226,8 @@ def _seed_report(seed: int, splits: dict[str, list[dict[str, Any]]]) -> str:
 
 def _validate_config(config: dict[str, Any]) -> None:
     hidden_sizes = {model["hidden_size"] for model in config["models"].values()}
-    if hidden_sizes != {4096}:
-        raise ValueError("All baseline models must expose 4,096-dimensional activations.")
+    if len(hidden_sizes) != 1:
+        raise ValueError("All models in a transfer run must expose the same activation width.")
     activations = config["activations"]
     if activations["primary_depth"] not in activations["normalized_depths"]:
         raise ValueError("The primary depth must appear in normalized_depths.")
