@@ -1,0 +1,132 @@
+name: frozen_probe_transfer_baseline
+runner: experiments.frozen_probe_transfer_baseline:run
+seed: 42
+data_seeds: [42, 137]
+deterministic: true
+stage: extract_activations
+training: false
+
+models:
+  llama:
+    backend: huggingface
+    id: meta-llama/Llama-3.1-8B-Instruct
+    revision: 0e9e39f249a16976918f6564b8830bc894c89659
+    layers: 32
+    hidden_size: 4096
+    role: independent_family
+  mistral:
+    backend: huggingface
+    id: mistralai/Mistral-7B-Instruct-v0.3
+    revision: c170c708c41dac9275d15a8fff4eca08d52bab71
+    layers: 32
+    hidden_size: 4096
+    role: independent_family
+  qwen:
+    backend: huggingface
+    id: Qwen/Qwen3-8B
+    revision: b968826d9c46dd6066d109eabc6255188de91218
+    layers: 36
+    hidden_size: 4096
+    role: independent_family
+  nemotron:
+    backend: huggingface
+    id: nvidia/Llama-3.1-Nemotron-Nano-8B-v1
+    revision: 54641c1611fcff44fa4865626462445e0a153fc7
+    layers: 32
+    hidden_size: 4096
+    role: llama_lineage_control
+
+dataset:
+  backend: huggingface
+  id: allenai/wildguardmix
+  revision: d29c47f41c8b51348b5c8e8c81c039b3132b66d1
+  train: { subset: wildguardtrain, split: train }
+  test: { subset: wildguardtest, split: test }
+  prompt_field: prompt
+  label_field: prompt_harm_label
+  positive_label: harmful
+  negative_label: unharmful
+  adversarial_field: adversarial
+
+sampling:
+  train_size: 12000
+  validation_size: 2000
+  balance_labels: true
+  stratify_by: [adversarial]
+  protect_test: true
+
+activations:
+  prompt_format: raw
+  token_position: last_non_padding
+  max_length: 512
+  max_truncation_rate: 0.05
+  normalized_depths: [0.25, 0.50, 0.75, 1.00]
+  primary_depth: 0.75
+  dtype: bfloat16
+  storage_dtype: bfloat16
+  batch_size: 8
+
+extraction:
+  mode: smoke
+  seed: 42
+  sample_size: 100
+  repeatability_rows: 8
+  repeatability_atol: 0.0001
+  models: [llama, mistral, qwen, nemotron]
+
+probes:
+  linear:
+    confirmatory: true
+    c_values: [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]
+    max_iter: 5000
+  cp_degree_2:
+    confirmatory: true
+    ranks: [1, 2, 4, 8, 16]
+    weight_decays: [0.0, 0.0001, 0.001]
+    learning_rate: 0.001
+    batch_size: 256
+    max_epochs: 200
+    patience: 20
+    restarts: 3
+  mlp:
+    confirmatory: false
+    hidden_size: 32
+    weight_decays: [0.0, 0.0001, 0.001]
+    learning_rate: 0.001
+    batch_size: 256
+    max_epochs: 200
+    patience: 20
+    restarts: 3
+
+evaluation:
+  primary_metrics: [auroc]
+  secondary_metrics:
+    - auprc
+    - accuracy
+    - balanced_accuracy
+    - precision
+    - recall
+    - f1
+    - expected_calibration_error
+    - tn
+    - fp
+    - fn
+    - tp
+    - tpr_at_fpr
+    - achieved_fpr_at_source_threshold
+  retain_row_level: [row_id, label, score, probability, prediction]
+  retain_thresholds: true
+  oracle_gate: 0.75
+  minimum_gap: 0.10
+  bootstrap_samples: 2000
+  confidence_level: 0.95
+  operating_fprs: [0.01, 0.05]
+  threshold_selection: source_validation_balanced_accuracy
+
+tracking:
+  wandb: false
+
+artifacts:
+  backend: huggingface_bucket
+  bucket: baimamboukar/coordinate-conncep-mismatch
+  prefix: experiments/frozen_probe_transfer_baseline
