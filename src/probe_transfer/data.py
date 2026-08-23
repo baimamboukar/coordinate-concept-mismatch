@@ -42,9 +42,15 @@ def load_huggingface_dataset(
     )
 
 
-def load_prepared_rows(path: str | Path, expected_size: int) -> list[dict[str, Any]]:
-    if expected_size < 2 or expected_size % 2:
-        raise ValueError("Expected prepared row count must be positive and even.")
+def load_prepared_rows(
+    path: str | Path,
+    expected_size: int,
+    *,
+    require_balanced: bool = True,
+) -> list[dict[str, Any]]:
+    if expected_size < 2 or (require_balanced and expected_size % 2):
+        requirement = "positive and even" if require_balanced else "at least two"
+        raise ValueError(f"Expected prepared row count must be {requirement}.")
 
     rows = []
     for line_number, line in enumerate(Path(path).read_text().splitlines(), start=1):
@@ -65,7 +71,10 @@ def load_prepared_rows(path: str | Path, expected_size: int) -> list[dict[str, A
         raise ValueError(f"Expected {expected_size} prepared rows, received {len(rows)}.")
     if len({row["row_id"] for row in rows}) != expected_size:
         raise ValueError("Prepared row IDs must be unique.")
-    if sum(row["label"] for row in rows) * 2 != expected_size:
+    labels = [row["label"] for row in rows]
+    if set(labels) != {0, 1}:
+        raise ValueError("Prepared rows must contain both binary labels.")
+    if require_balanced and sum(labels) * 2 != expected_size:
         raise ValueError("Prepared rows must be label-balanced.")
     return rows
 

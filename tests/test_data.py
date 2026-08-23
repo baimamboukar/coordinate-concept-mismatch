@@ -29,6 +29,18 @@ def test_loads_validated_prepared_rows(tmp_path: Path) -> None:
         load_prepared_rows(path, 4)
 
 
+def test_loads_unbalanced_protected_test_rows(tmp_path: Path) -> None:
+    rows = [
+        {"row_id": 1, "prompt": "safe one", "label": 0},
+        {"row_id": 2, "prompt": "safe two", "label": 0},
+        {"row_id": 3, "prompt": "unsafe", "label": 1},
+    ]
+    path = tmp_path / "test.jsonl"
+    path.write_text("\n".join(json.dumps(row) for row in rows))
+
+    assert len(load_prepared_rows(path, 3, require_balanced=False)) == 3
+
+
 def test_normalize_prompt_collapses_equivalent_text() -> None:
     assert normalize_prompt("  Harmful\nPrompt ") == normalize_prompt("harmful prompt")
 

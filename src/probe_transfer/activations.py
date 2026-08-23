@@ -160,6 +160,22 @@ def save_activation_file(
     return _sha256(path)
 
 
+def load_activation_split(
+    path: str | Path, layer_key: str
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    required = {layer_key, "row_ids", "labels"}
+    with safe_open(path, framework="pt", device="cpu") as saved:
+        missing = required - set(saved.keys())
+        if missing:
+            raise ValueError(f"Activation file is missing tensors: {sorted(missing)}")
+        activations = saved.get_tensor(layer_key).float()
+        row_ids = saved.get_tensor("row_ids").long()
+        labels = saved.get_tensor("labels").long()
+    if len(activations) != len(row_ids) or len(row_ids) != len(labels):
+        raise ValueError("Activation, row ID, and label counts do not match.")
+    return activations, row_ids, labels
+
+
 def upload_bucket_file(local_path: Path, bucket: str, remote_path: str) -> UploadedArtifact:
     hf = shutil.which("hf")
     if hf is None:

@@ -31,7 +31,10 @@ def select_fpr_thresholds(
         if not len(valid):
             raise ValueError(f"No ROC operating point is available at FPR {target}.")
         best = valid[np.argmax(true_positive_rate[valid])]
-        selected[float(target)] = float(thresholds[best])
+        threshold = float(thresholds[best])
+        if not np.isfinite(threshold):
+            threshold = float(np.nextafter(np.max(scores), np.inf))
+        selected[float(target)] = threshold
     return selected
 
 
@@ -90,6 +93,41 @@ def fixed_operating_point_metrics(
         metrics[f"tpr_at_source_{suffix}"] = tp / positive_count
         metrics[f"source_threshold_{suffix}"] = float(threshold)
     return metrics
+
+
+def paired_auroc_gap_interval(
+    labels: np.ndarray,
+    oracle_scores: np.ndarray,
+    transfer_scores: np.ndarray,
+    *,
+    samples: int,
+    confidence: float,
+    seed: int,
+) -> tuple[float, float, float]:
+    labels = np.asarray(labels, dtype=np.int64)
+    oracle_scores = np.asarray(oracle_scores, dtype=np.float64)
+    transfer_scores = np.asarray(transfer_scores, dtype=np.float64)
+    if not (len(labels) == len(oracle_scores) == len(transfer_scores)):
+        raise ValueError("Labels and paired score arrays must have equal lengths.")
+    if samples < 1 or not 0 < confidence < 1:
+        raise ValueError("Bootstrap samples and confidence must be valid.")
+
+    observed = float(roc_auc_score(labels, oracle_scores) - roc_auc_score(labels, transfer_scores))
+    rng = np.random.default_rng(seed)
+    differences = []
+    while len(differences) < samples:
+        indices = rng.integers(0, len(labels), size=len(labels))
+        sampled_labels = labels[indices]
+        if np.unique(sampled_labels).size != 2:
+            continue
+        differences.append(
+            roc_auc_score(sampled_labels, oracle_scores[indices])
+            - roc_auc_score(sampled_labels, transfer_scores[indices])
+        )
+
+    tail = (1 - confidence) / 2
+    lower, upper = np.quantile(differences, [tail, 1 - tail])
+    return observed, float(lower), float(upper)
 
 
 def prediction_rows(

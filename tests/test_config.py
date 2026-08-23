@@ -5,6 +5,7 @@ import pytest
 from core.config import ConfigError, load_config
 from core.constants import CONFIGS_DIR
 from experiments.frozen_probe_transfer_baseline import _validate_config
+from experiments.pythia_seed_probe_transfer import _validate_config as validate_pythia_transfer
 
 
 def write_config(path: Path, name: str) -> None:
@@ -84,6 +85,19 @@ def test_pythia_smoke_config_is_pinned_and_valid() -> None:
     assert config["extraction"]["models"] == ["pythia_410m"]
     assert config["artifacts"]["defer_upload"] is True
     _validate_config(config)
+
+
+def test_pythia_seed_transfer_config_is_pinned_and_valid() -> None:
+    config = load_config(CONFIGS_DIR / "pythia_seed_probe_transfer.yaml")
+
+    assert config["data_seeds"] == [42, 137]
+    assert list(config["models"]) == ["pythia_seed1234", "pythia_seed1"]
+    assert config["models"]["pythia_seed1"]["revision"] == (
+        "33803c4f5a1e9a4bece59e52f17bb8755add33e1"
+    )
+    assert config["tracking"]["wandb"] is True
+    assert config["artifacts"]["defer_upload"] is True
+    validate_pythia_transfer(config)
 
 
 def test_rejects_experiment_without_primary_and_secondary_metrics(tmp_path: Path) -> None:

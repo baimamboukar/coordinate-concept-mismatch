@@ -10,6 +10,7 @@ from probe_transfer.activations import (
     assert_repeatable,
     bucket_uri,
     extract_activation_tensors,
+    load_activation_split,
     save_activation_file,
     upload_bucket_file,
 )
@@ -100,6 +101,10 @@ def test_saved_file_and_repeatability_are_verified(tmp_path: Path) -> None:
 
     assert path.is_file()
     assert len(digest) == 64
+    activations, row_ids, labels = load_activation_split(path, "layer_75")
+    assert activations.shape == (2, 3)
+    assert row_ids.tolist() == [1, 2]
+    assert labels.tolist() == [0, 1]
 
 
 def test_deferred_upload_uses_configured_staging_dir(
