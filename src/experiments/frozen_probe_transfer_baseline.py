@@ -1,6 +1,9 @@
 import gc
 import json
+import os
 from collections import Counter
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -61,8 +64,7 @@ def _extract_activation_smoke(config: dict[str, Any], tracker: Tracker) -> None:
     artifact_config = config["artifacts"]
     extracted = []
 
-    with TemporaryDirectory(prefix="coordinate-concept-activations-") as temporary:
-        temporary_dir = Path(temporary)
+    with _artifact_directory(artifact_config) as artifact_dir:
         for model_name in extraction["models"]:
             model_config = config["models"][model_name]
             tokenizer, model = load_activation_model(
@@ -90,7 +92,7 @@ def _extract_activation_smoke(config: dict[str, Any], tracker: Tracker) -> None:
                 rows=extraction["repeatability_rows"],
                 atol=extraction["repeatability_atol"],
             )
-            path = temporary_dir / f"{model_name}.safetensors"
+            path = artifact_dir / f"{model_name}.safetensors"
             sha256 = save_activation_file(
                 path,
                 tensors,
@@ -101,6 +103,10 @@ def _extract_activation_smoke(config: dict[str, Any], tracker: Tracker) -> None:
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+
+        if artifact_config.get("defer_upload", False):
+            _report_staged_activations(tracker, extracted)
+            return
 
         uploaded = []
         for model_name, path, stats, sha256 in extracted:
@@ -114,6 +120,21 @@ def _extract_activation_smoke(config: dict[str, Any], tracker: Tracker) -> None:
             uploaded.append((model_name, stats, artifact))
 
     _report_smoke_test(tracker, artifact_config, seed, uploaded)
+
+
+@contextmanager
+def _artifact_directory(artifacts: dict[str, Any]) -> Iterator[Path]:
+    if artifacts.get("defer_upload", False):
+        configured = os.getenv("ACTIVATION_STAGING_DIR")
+        if not configured:
+            raise RuntimeError("ACTIVATION_STAGING_DIR is required when upload is deferred.")
+        staging_dir = Path(configured).expanduser().resolve()
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        yield staging_dir
+        return
+
+    with TemporaryDirectory(prefix="coordinate-concept-activations-") as temporary:
+        yield Path(temporary)
 
 
 def _extract(
@@ -200,6 +221,20 @@ def _report_smoke_test(
         + "\n".join(lines)
         + f"\n\nBucket: `hf://buckets/{artifacts['bucket']}/"
         f"{artifacts['prefix']}/activations/smoke/seed_{seed}/`.",
+    )
+
+
+def _report_staged_activations(tracker: Tracker, extracted: list[Any]) -> None:
+    lines = [
+        f"| {name} | {stats.rows} | {stats.truncation_rate:.2%} | `{path}` | `{sha256}` |"
+        for name, path, stats, sha256 in extracted
+    ]
+    tracker.report(
+        "Activation smoke test",
+        "| Model | Rows | Truncated | Staged file | SHA-256 |\n"
+        "| --- | ---: | ---: | --- | --- |\n"
+        + "\n".join(lines)
+        + "\n\nUpload was deferred so the worker did not receive Hugging Face credentials.",
     )
 
 

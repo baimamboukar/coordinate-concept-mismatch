@@ -4,7 +4,10 @@ import pytest
 
 from core.config import ConfigError, load_config
 from core.constants import CONFIGS_DIR
-from experiments.frozen_probe_transfer_baseline import _validate_config
+from experiments.frozen_probe_transfer_baseline import (
+    _artifact_directory,
+    _validate_config,
+)
 
 
 def write_config(path: Path, name: str) -> None:
@@ -82,7 +85,17 @@ def test_pythia_smoke_config_is_pinned_and_valid() -> None:
     assert model["revision"] == "9879c9b5f8bea9051dcb0e68dff21493d67e9d4f"
     assert (model["layers"], model["hidden_size"]) == (24, 1024)
     assert config["extraction"]["models"] == ["pythia_410m"]
+    assert config["artifacts"]["defer_upload"] is True
     _validate_config(config)
+
+
+def test_deferred_upload_uses_configured_staging_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ACTIVATION_STAGING_DIR", str(tmp_path))
+
+    with _artifact_directory({"defer_upload": True}) as staging_dir:
+        assert staging_dir == tmp_path.resolve()
 
 
 def test_rejects_experiment_without_primary_and_secondary_metrics(tmp_path: Path) -> None:
