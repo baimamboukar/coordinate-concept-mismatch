@@ -6,6 +6,7 @@ import torch
 from torch import nn
 
 from probe_transfer.activations import (
+    activation_output_directory,
     assert_repeatable,
     bucket_uri,
     extract_activation_tensors,
@@ -99,6 +100,15 @@ def test_saved_file_and_repeatability_are_verified(tmp_path: Path) -> None:
 
     assert path.is_file()
     assert len(digest) == 64
+
+
+def test_deferred_upload_uses_configured_staging_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ACTIVATION_STAGING_DIR", str(tmp_path))
+
+    with activation_output_directory(True) as staging_dir:
+        assert staging_dir == tmp_path.resolve()
 
 
 def test_bucket_uri_rejects_unsafe_paths() -> None:

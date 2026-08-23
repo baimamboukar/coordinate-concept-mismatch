@@ -2,22 +2,19 @@ import gc
 import json
 import os
 from collections import Counter
-from collections.abc import Iterator
-from contextlib import contextmanager
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import Any
 
 import torch
 
 from core.tracking import Tracker
+from probe_transfer import data as probe_data
 from probe_transfer.activations import (
+    activation_output_directory,
     assert_repeatable,
     extract_activation_tensors,
     save_activation_file,
     upload_bucket_file,
 )
-from probe_transfer.data import balanced_subset, load_huggingface_dataset, prepare_splits
 from probe_transfer.models import load_activation_model
 
 
@@ -53,18 +50,24 @@ def _prepare_data(config: dict[str, Any], tracker: Tracker) -> None:
 
 
 def _extract_activation_smoke(config: dict[str, Any], tracker: Tracker) -> None:
-    _, seed_splits, _ = _load_splits(config)
     extraction = config["extraction"]
     if extraction["mode"] != "smoke":
         raise ValueError("Only smoke activation extraction is implemented.")
 
     seed = extraction["seed"]
-    rows = balanced_subset(seed_splits[seed]["train"], extraction["sample_size"], seed)
+    prepared_rows = os.getenv("ACTIVATION_ROWS_PATH")
+    if prepared_rows:
+        rows = probe_data.load_prepared_rows(prepared_rows, extraction["sample_size"])
+    else:
+        _, seed_splits, _ = _load_splits(config)
+        rows = probe_data.balanced_subset(
+            seed_splits[seed]["train"], extraction["sample_size"], seed
+        )
     activation_config = config["activations"]
     artifact_config = config["artifacts"]
     extracted = []
 
-    with _artifact_directory(artifact_config) as artifact_dir:
+    with activation_output_directory(artifact_config.get("defer_upload", False)) as artifact_dir:
         for model_name in extraction["models"]:
             model_config = config["models"][model_name]
             tokenizer, model = load_activation_model(
@@ -122,21 +125,6 @@ def _extract_activation_smoke(config: dict[str, Any], tracker: Tracker) -> None:
     _report_smoke_test(tracker, artifact_config, seed, uploaded)
 
 
-@contextmanager
-def _artifact_directory(artifacts: dict[str, Any]) -> Iterator[Path]:
-    if artifacts.get("defer_upload", False):
-        configured = os.getenv("ACTIVATION_STAGING_DIR")
-        if not configured:
-            raise RuntimeError("ACTIVATION_STAGING_DIR is required when upload is deferred.")
-        staging_dir = Path(configured).expanduser().resolve()
-        staging_dir.mkdir(parents=True, exist_ok=True)
-        yield staging_dir
-        return
-
-    with TemporaryDirectory(prefix="coordinate-concept-activations-") as temporary:
-        yield Path(temporary)
-
-
 def _extract(
     config: dict[str, Any],
     rows: list[dict[str, Any]],
@@ -162,20 +150,20 @@ def _load_splits(config: dict[str, Any]):
     dataset = config["dataset"]
     train_spec = dataset["train"]
     test_spec = dataset["test"]
-    train_rows = load_huggingface_dataset(
+    train_rows = probe_data.load_huggingface_dataset(
         dataset["id"],
         dataset["revision"],
         subset=train_spec["subset"],
         split=train_spec["split"],
     )
-    test_rows = load_huggingface_dataset(
+    test_rows = probe_data.load_huggingface_dataset(
         dataset["id"],
         dataset["revision"],
         subset=test_spec["subset"],
         split=test_spec["split"],
     )
     sampling = config["sampling"]
-    return prepare_splits(
+    return probe_data.prepare_splits(
         train_rows,
         test_rows,
         train_size=sampling["train_size"],

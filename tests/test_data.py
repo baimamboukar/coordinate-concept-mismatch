@@ -1,11 +1,32 @@
+import json
+from pathlib import Path
+
 import pytest
 
-from probe_transfer.data import load_huggingface_dataset, normalize_prompt, prepare_splits
+from probe_transfer.data import (
+    load_huggingface_dataset,
+    load_prepared_rows,
+    normalize_prompt,
+    prepare_splits,
+)
 
 
 def test_huggingface_dataset_revision_must_be_pinned() -> None:
     with pytest.raises(ValueError, match="40-character commit"):
         load_huggingface_dataset("organization/dataset", "main")
+
+
+def test_loads_validated_prepared_rows(tmp_path: Path) -> None:
+    rows = [
+        {"row_id": 1, "prompt": "safe", "label": 0, "adversarial": False},
+        {"row_id": 2, "prompt": "unsafe", "label": 1, "adversarial": True},
+    ]
+    path = tmp_path / "rows.jsonl"
+    path.write_text("\n".join(json.dumps(row) for row in rows))
+
+    assert load_prepared_rows(path, 2) == rows
+    with pytest.raises(ValueError, match="Expected 4"):
+        load_prepared_rows(path, 4)
 
 
 def test_normalize_prompt_collapses_equivalent_text() -> None:

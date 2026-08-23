@@ -1,9 +1,11 @@
 import hashlib
+import json
 import os
 import random
 import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
+from pathlib import Path
 from typing import Any, TypedDict
 
 from core.reproducibility import is_pinned_hf_revision
@@ -38,6 +40,34 @@ def load_huggingface_dataset(
         token=os.getenv("HF_TOKEN"),
         **parameters,
     )
+
+
+def load_prepared_rows(path: str | Path, expected_size: int) -> list[dict[str, Any]]:
+    if expected_size < 2 or expected_size % 2:
+        raise ValueError("Expected prepared row count must be positive and even.")
+
+    rows = []
+    for line_number, line in enumerate(Path(path).read_text().splitlines(), start=1):
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if not isinstance(row, dict):
+            raise TypeError(f"Prepared row {line_number} must be a JSON object.")
+        if type(row.get("row_id")) is not int:
+            raise ValueError(f"Prepared row {line_number} requires an integer row_id.")
+        if not isinstance(row.get("prompt"), str) or not row["prompt"].strip():
+            raise ValueError(f"Prepared row {line_number} requires a non-empty prompt.")
+        if type(row.get("label")) is not int or row["label"] not in (0, 1):
+            raise ValueError(f"Prepared row {line_number} requires a binary integer label.")
+        rows.append(row)
+
+    if len(rows) != expected_size:
+        raise ValueError(f"Expected {expected_size} prepared rows, received {len(rows)}.")
+    if len({row["row_id"] for row in rows}) != expected_size:
+        raise ValueError("Prepared row IDs must be unique.")
+    if sum(row["label"] for row in rows) * 2 != expected_size:
+        raise ValueError("Prepared rows must be label-balanced.")
+    return rows
 
 
 def normalize_prompt(prompt: str) -> str:

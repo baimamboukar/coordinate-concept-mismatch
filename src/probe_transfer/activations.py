@@ -1,8 +1,12 @@
 import hashlib
+import os
 import shutil
 import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from tempfile import TemporaryDirectory
 from typing import Any
 
 import torch
@@ -28,6 +32,21 @@ class UploadedArtifact:
     uri: str
     sha256: str
     size_bytes: int
+
+
+@contextmanager
+def activation_output_directory(defer_upload: bool) -> Iterator[Path]:
+    if defer_upload:
+        configured = os.getenv("ACTIVATION_STAGING_DIR")
+        if not configured:
+            raise RuntimeError("ACTIVATION_STAGING_DIR is required when upload is deferred.")
+        staging_dir = Path(configured).expanduser().resolve()
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        yield staging_dir
+        return
+
+    with TemporaryDirectory(prefix="coordinate-concept-activations-") as temporary:
+        yield Path(temporary)
 
 
 def extract_activation_tensors(
