@@ -18,5 +18,3 @@ logs/**/*.log
 *.pt
 *.pth
 artifacts/**/cache/
-
-docs
