@@ -1,0 +1,22 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.ruff_cache/
+.cache/
+wandb/
+
+# Raw runtime logs stay local; experiment plans and reports are tracked.
+logs/**/*.jsonl
+logs/**/*.log
+
+# Model weights and regenerable activation caches belong on Hugging Face.
+*.safetensors
+*.pt
+*.pth
+artifacts/**/cache/
+
+docs

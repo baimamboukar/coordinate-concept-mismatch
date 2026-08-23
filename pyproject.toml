@@ -1,0 +1,52 @@
+[project]
+name = "coordinate-concept-mismatch"
+version = "0.1.0"
+description = "Disentangling coordinate mismatch from representational differences in cross-model probe transfer."
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "accelerate>=1.9",
+    "datasets>=4.0",
+    "huggingface-hub>=0.34",
+    "numpy>=2.0",
+    "openai>=1.0",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "safetensors>=0.5",
+    "scikit-learn>=1.7",
+    "torch>=2.7",
+    "transformers>=4.55",
+    "wandb>=0.21",
+]
+
+[dependency-groups]
+dev = [
+    "commitizen>=4.0",
+    "pre-commit>=4.0",
+    "pre-commit-hooks>=6.0",
+    "pyright>=1.1",
+    "pytest>=8.4",
+    "ruff>=0.12",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.pyright]
+include = ["src", "tests"]
+extraPaths = ["src"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "pep621"
