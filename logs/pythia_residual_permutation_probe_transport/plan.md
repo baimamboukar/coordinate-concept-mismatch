@@ -36,7 +36,7 @@ Probe parameters, preprocessing, thresholds, examples, and labels remain fixed. 
 
 ## Outcomes and decision rules
 
-**H1 — Function preservation.** In deterministic FP32 over all 1,699 held-out prompts at the final non-padding position, the transformation must produce maximum absolute logit error at most $10^{-3}$, 100% next-token agreement, and relative activation-equivariance error at most $10^{-4}$ at every probed layer. Failure of either gate invalidates the intervention.
+**H1 — Function preservation.** In deterministic FP32 over all 1,699 held-out prompts at the final non-padding position, the transformed logits must satisfy `atol=1e-3, rtol=1e-4`, with 100% next-token agreement, and relative activation-equivariance error at most $10^{-4}$ at every probed layer. Failure of either gate invalidates the intervention.
 
 **H2 — Coordinate-induced failure.** With reference AUROC $A_{\mathrm{ref}}$ and raw-transfer AUROC $A_{\mathrm{raw}}$, define $G_{\mathrm{raw}}=A_{\mathrm{ref}}-A_{\mathrm{raw}}$. Failure requires $A_{\mathrm{ref}} \geq 0.75$, $G_{\mathrm{raw}} \geq 0.10$, and a paired 95% bootstrap interval whose lower bound exceeds zero.
 

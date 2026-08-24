@@ -11,6 +11,7 @@ def test_controlled_symmetry_config_is_pinned_and_valid() -> None:
     assert config["symmetry"]["permutation_seeds"] == [42, 137]
     assert config["materials"]["expected_test_rows"] == 1699
     assert config["symmetry"]["gate_rows"] == 1699
+    assert config["symmetry"]["logit_rtol"] == 0.0001
     assert config["evaluation"]["primary_metrics"] == [
         "raw_auroc_gap",
         "recovery_fraction",

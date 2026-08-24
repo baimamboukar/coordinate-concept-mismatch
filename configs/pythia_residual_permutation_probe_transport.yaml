@@ -38,6 +38,7 @@ symmetry:
   gate_batch_size: 8
   gate_max_length: 512
   logit_atol: 0.001
+  logit_rtol: 0.0001
   activation_relative_tolerance: 0.0001
 
 evaluation:

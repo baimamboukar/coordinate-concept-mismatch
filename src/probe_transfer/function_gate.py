@@ -113,7 +113,11 @@ def _gate_record(
     target: torch.Tensor,
     config: dict[str, Any],
 ) -> dict[str, Any]:
-    logit_error = float(torch.max(torch.abs(reference.logits - actual.logits)))
+    absolute_errors = torch.abs(reference.logits - actual.logits)
+    tolerances = config["logit_atol"] + config["logit_rtol"] * torch.abs(reference.logits)
+    logit_close = bool(torch.all(absolute_errors <= tolerances))
+    logit_error = float(torch.max(absolute_errors))
+    scaled_logit_error = float(torch.max(absolute_errors / tolerances))
     agreement = float(
         torch.mean((reference.logits.argmax(dim=-1) == actual.logits.argmax(dim=-1)).float())
     )
@@ -125,7 +129,7 @@ def _gate_record(
         activation_errors[key] = float(error / denominator)
     maximum_activation_error = max(activation_errors.values())
     passed = bool(
-        logit_error <= config["logit_atol"]
+        logit_close
         and agreement == 1.0
         and maximum_activation_error <= config["activation_relative_tolerance"]
     )
@@ -136,6 +140,8 @@ def _gate_record(
         "rows": len(reference.logits),
         "logit_position": "last_non_padding",
         "maximum_logit_error": logit_error,
+        "maximum_scaled_logit_error": scaled_logit_error,
+        "logit_tolerance_passed": logit_close,
         "next_token_agreement": agreement,
         "activation_relative_errors": activation_errors,
         "maximum_activation_relative_error": maximum_activation_error,

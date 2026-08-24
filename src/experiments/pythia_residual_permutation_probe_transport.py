@@ -58,6 +58,7 @@ def _log_gates(tracker: Tracker, gates: list[dict[str, Any]]) -> None:
         tracker.metrics(
             {
                 f"{prefix}/maximum_logit_error": gate["maximum_logit_error"],
+                f"{prefix}/maximum_scaled_logit_error": gate["maximum_scaled_logit_error"],
                 f"{prefix}/next_token_agreement": gate["next_token_agreement"],
                 f"{prefix}/maximum_activation_relative_error": gate[
                     "maximum_activation_relative_error"
@@ -109,6 +110,8 @@ def _validate_config(config: dict[str, Any]) -> None:
     symmetry = config["symmetry"]
     if symmetry["gate_rows"] != config["materials"]["expected_test_rows"]:
         raise ValueError("Function gates must cover the complete held-out test set.")
+    if symmetry["logit_atol"] <= 0 or symmetry["logit_rtol"] <= 0:
+        raise ValueError("Logit tolerances must be positive.")
     if symmetry["permutation_seeds"] != [42, 137]:
         raise ValueError("The prespecified permutation seeds are 42 and 137.")
     widths = {model["hidden_size"] for model in config["models"].values()}
