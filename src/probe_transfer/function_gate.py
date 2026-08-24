@@ -99,8 +99,8 @@ def _collect_outputs(
                 select_last_non_padding(output.hidden_states[block], inputs["attention_mask"]).cpu()
             )
     return GateOutputs(
-        logits=torch.cat(logits).float(),
-        hidden_states={key: torch.cat(values).float() for key, values in hidden_states.items()},
+        logits=torch.cat(logits),
+        hidden_states={key: torch.cat(values) for key, values in hidden_states.items()},
     )
 
 
