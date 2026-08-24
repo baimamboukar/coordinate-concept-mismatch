@@ -110,6 +110,8 @@ def _validate_config(config: dict[str, Any]) -> None:
     symmetry = config["symmetry"]
     if symmetry["gate_rows"] != config["materials"]["expected_test_rows"]:
         raise ValueError("Function gates must cover the complete held-out test set.")
+    if symmetry["gate_dtype"] != "float64":
+        raise ValueError("Function equivalence must be certified in FP64.")
     if symmetry["logit_atol"] <= 0 or symmetry["logit_rtol"] <= 0:
         raise ValueError("Logit tolerances must be positive.")
     if symmetry["permutation_seeds"] != [42, 137]:

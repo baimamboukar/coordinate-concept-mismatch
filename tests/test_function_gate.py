@@ -21,6 +21,7 @@ def test_function_gate_uses_combined_logit_tolerance() -> None:
         actual,
         torch.arange(2),
         {
+            "gate_dtype": "float64",
             "logit_atol": 1e-3,
             "logit_rtol": 1e-4,
             "activation_relative_tolerance": 1e-4,

@@ -29,7 +29,7 @@ def run_function_gates(
         tokenizer, model = load_activation_model(
             model_config["id"],
             model_config["revision"],
-            dtype="float32",
+            dtype=symmetry["gate_dtype"],
         )
         reference = _collect_outputs(tokenizer, model, rows, model_config, symmetry)
         width = model_config["hidden_size"]
@@ -139,6 +139,7 @@ def _gate_record(
         "permutation_seed": seed,
         "rows": len(reference.logits),
         "logit_position": "last_non_padding",
+        "dtype": config["gate_dtype"],
         "maximum_logit_error": logit_error,
         "maximum_scaled_logit_error": scaled_logit_error,
         "logit_tolerance_passed": logit_close,
