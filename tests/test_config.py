@@ -64,16 +64,35 @@ def test_huggingface_resources_require_commit_revision(tmp_path: Path) -> None:
         load_config(path)
 
 
-def test_baseline_config_uses_qwen_and_pinned_resources() -> None:
+def test_baseline_config_scopes_modern_pair_and_controls() -> None:
     config = load_config(CONFIGS_DIR / "frozen_probe_transfer_baseline.yaml")
 
+    assert list(config["models"]) == ["llama", "qwen", "nemotron"]
     assert config["models"]["qwen"]["id"] == "Qwen/Qwen3-8B"
-    assert "glm" not in config["models"]
     assert {model["hidden_size"] for model in config["models"].values()} == {4096}
     assert config["data_seeds"] == [42, 137]
-    assert config["stage"] == "extract_activations"
-    assert config["extraction"]["sample_size"] == 100
+    assert config["stage"] == "modern_baseline"
+    assert config["training"] is True
+    assert config["sampling"]["test_size"] == 1699
+    assert config["activations"]["normalized_depths"] == [0.25, 0.5, 0.75, 1.0]
+    assert config["extraction"]["mode"] == "full"
+    assert config["extraction"]["models"] == ["llama", "qwen", "nemotron"]
+
+    jobs = config["extraction"]["jobs"]
+    assert {job["model"] for job in jobs} == {"llama", "qwen", "nemotron"}
+    assert all(job["accelerator"] == "H100" and job["gpu_count"] == 1 for job in jobs)
+
+    pair_groups = config["evaluation"]["pair_groups"]
+    assert pair_groups["primary"] == [["llama", "qwen"], ["qwen", "llama"]]
+    assert len(pair_groups["lineage_control"]) == 2
+    assert len(pair_groups["exploratory"]) == 2
+    assert config["claims"]["broad_three_family"] == "pending"
+
+    assert config["tracking"] == {"wandb": True, "mode": "offline"}
     assert config["artifacts"]["bucket"] == "baimamboukar/coordinate-concept-mismatch"
+    assert config["artifacts"]["defer_upload"] is True
+    assert config["evaluation"]["primary_metrics"] == ["auroc", "auroc_transfer_gap"]
+    assert config["evaluation"]["operating_fprs"] == [0.01, 0.05]
     _validate_config(config)
 
 

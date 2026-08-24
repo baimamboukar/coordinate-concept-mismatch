@@ -216,6 +216,7 @@ def _gap_rows(
                 "probe_family": family,
                 "source_model": source,
                 "target_model": target,
+                "pair_group": _pair_group(config, source, target),
                 "source_auroc": source_auroc,
                 "target_oracle_auroc": target_auroc,
                 "transfer_auroc": lookup[key]["auroc"],
@@ -226,6 +227,16 @@ def _gap_rows(
             }
         )
     return gaps
+
+
+def _pair_group(config: dict[str, Any], source: str, target: str) -> str:
+    groups = config["evaluation"].get("pair_groups")
+    if groups is None:
+        return "primary"
+    for name, pairs in groups.items():
+        if [source, target] in pairs:
+            return str(name)
+    raise ValueError(f"Transfer pair is not assigned to an evaluation group: {source} -> {target}")
 
 
 def _save_outputs(

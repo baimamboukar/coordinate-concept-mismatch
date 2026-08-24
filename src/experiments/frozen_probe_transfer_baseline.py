@@ -15,6 +15,9 @@ from probe_transfer.activations import (
     save_activation_file,
     upload_bucket_file,
 )
+from probe_transfer.baseline_config import validate_modern_baseline
+from probe_transfer.baseline_transfer import run_staged_transfer
+from probe_transfer.model_extraction import run_model_extraction
 from probe_transfer.models import load_activation_model
 
 
@@ -25,6 +28,14 @@ def run(config: dict[str, Any], tracker: Tracker) -> None:
         _prepare_data(config, tracker)
     elif stage == "extract_activations":
         _extract_activation_smoke(config, tracker)
+    elif stage == "modern_baseline":
+        task = os.getenv("BASELINE_TASK", "extract")
+        if task == "extract":
+            run_model_extraction(config, tracker)
+        elif task == "transfer":
+            run_staged_transfer(config, tracker)
+        else:
+            raise ValueError(f"Unsupported modern baseline task: {task}")
     else:
         raise ValueError(f"Unsupported baseline stage: {stage}")
 
@@ -248,6 +259,9 @@ def _seed_report(seed: int, splits: dict[str, list[dict[str, Any]]]) -> str:
 
 
 def _validate_config(config: dict[str, Any]) -> None:
+    if config.get("stage") == "modern_baseline":
+        validate_modern_baseline(config)
+        return
     hidden_sizes = {model["hidden_size"] for model in config["models"].values()}
     if len(hidden_sizes) != 1:
         raise ValueError("All models in a transfer run must expose the same activation width.")

@@ -36,6 +36,7 @@ class Tracker:
                 name=f"{experiment}-{stage}",
                 group=experiment,
                 config=config,
+                mode=tracking.get("mode"),
             )
 
         tracker = cls(
