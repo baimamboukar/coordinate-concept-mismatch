@@ -2,7 +2,7 @@
 name = "coordinate-concept-mismatch"
 version = "0.1.0"
 description = "Disentangling coordinate mismatch from representational differences in cross-model probe transfer."
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "accelerate>=1.9",
     "datasets>=4.0",
