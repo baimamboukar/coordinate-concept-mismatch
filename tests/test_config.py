@@ -5,7 +5,9 @@ import pytest
 from core.config import ConfigError, load_config
 from core.constants import CONFIGS_DIR
 from experiments.frozen_probe_transfer_baseline import _validate_config
-from experiments.pythia_seed_probe_transfer import _validate_config as validate_pythia_transfer
+from experiments.frozen_probe_transfer_baseline_pythia_pilot import (
+    _validate_config as validate_pythia_pilot,
+)
 
 
 def write_config(path: Path, name: str) -> None:
@@ -75,21 +77,11 @@ def test_baseline_config_uses_qwen_and_pinned_resources() -> None:
     _validate_config(config)
 
 
-def test_pythia_smoke_config_is_pinned_and_valid() -> None:
-    config = load_config(CONFIGS_DIR / "pythia_activation_smoke.yaml")
+def test_baseline_pythia_pilot_config_is_pinned_and_valid() -> None:
+    config = load_config(CONFIGS_DIR / "frozen_probe_transfer_baseline_pythia_pilot.yaml")
 
-    model = config["models"]["pythia_410m"]
-    assert model["id"] == "EleutherAI/pythia-410m"
-    assert model["revision"] == "9879c9b5f8bea9051dcb0e68dff21493d67e9d4f"
-    assert (model["layers"], model["hidden_size"]) == (24, 1024)
-    assert config["extraction"]["models"] == ["pythia_410m"]
-    assert config["artifacts"]["defer_upload"] is True
-    _validate_config(config)
-
-
-def test_pythia_seed_transfer_config_is_pinned_and_valid() -> None:
-    config = load_config(CONFIGS_DIR / "pythia_seed_probe_transfer.yaml")
-
+    assert config["name"] == "frozen_probe_transfer_baseline_pythia_pilot"
+    assert config["stage"] == "pythia_pilot"
     assert config["data_seeds"] == [42, 137]
     assert list(config["models"]) == ["pythia_seed1234", "pythia_seed1"]
     assert config["models"]["pythia_seed1"]["revision"] == (
@@ -97,7 +89,10 @@ def test_pythia_seed_transfer_config_is_pinned_and_valid() -> None:
     )
     assert config["tracking"]["wandb"] is True
     assert config["artifacts"]["defer_upload"] is True
-    validate_pythia_transfer(config)
+    assert config["artifacts"]["prefix"] == (
+        "experiments/frozen_probe_transfer_baseline/pythia_pilot"
+    )
+    validate_pythia_pilot(config)
 
 
 def test_rejects_experiment_without_primary_and_secondary_metrics(tmp_path: Path) -> None:

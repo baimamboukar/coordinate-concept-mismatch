@@ -204,8 +204,8 @@ def _required_directory(name: str, *, create: bool = False) -> Path:
 
 
 def _validate_config(config: dict[str, Any]) -> None:
-    if config.get("stage") != "full_pilot" or config.get("training") is not True:
-        raise ValueError("The Pythia transfer runner requires the full_pilot training stage.")
+    if config.get("stage") != "pythia_pilot" or config.get("training") is not True:
+        raise ValueError("The baseline Pythia pilot requires its training stage.")
     if len(config["models"]) != 2 or len(config["data_seeds"]) != 2:
         raise ValueError("The pilot requires exactly two model checkpoints and two data seeds.")
     widths = {model["hidden_size"] for model in config["models"].values()}

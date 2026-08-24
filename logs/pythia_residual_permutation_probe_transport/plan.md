@@ -28,7 +28,7 @@ This intervention changes the coordinates observed by the probes while preservin
 
 - **Models:** `EleutherAI/pythia-410m` is primary; `EleutherAI/pythia-410m-seed1` is a prespecified replication. Both retain the revisions used in Experiment 1.
 - **Interventions:** an identity control and two independently sampled global residual permutations, with seeds 42 and 137.
-- **Materials:** reuse both data seeds, the shared 1,699-row test set, and the frozen probes from [Experiment 1](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/pythia_seed_probe_transfer).
+- **Materials:** reuse both data seeds, the shared 1,699-row test set, and the frozen probes from the Pythia pilot reported in [Experiment 1](../frozen_probe_transfer_baseline/report.md).
 - **Probes:** linear, degree-2 CP, and one-hidden-layer MLP probes at block 18 are primary; linear probes at blocks 6, 12, and 24 are secondary.
 - **Conditions:** original reference, identity control, raw frozen transfer, exact probe transport, and inverse-direction transport.
 

@@ -1,19 +1,26 @@
-name: pythia_activation_smoke
-runner: experiments.frozen_probe_transfer_baseline:run
+name: frozen_probe_transfer_baseline_pythia_pilot
+runner: experiments.frozen_probe_transfer_baseline_pythia_pilot:run
 seed: 42
 data_seeds: [42, 137]
 deterministic: true
-stage: extract_activations
-training: false
+stage: pythia_pilot
+training: true
 
 models:
-  pythia_410m:
+  pythia_seed1234:
     backend: huggingface
     id: EleutherAI/pythia-410m
     revision: 9879c9b5f8bea9051dcb0e68dff21493d67e9d4f
     layers: 24
     hidden_size: 1024
-    role: engineering_control
+    role: original_training_seed
+  pythia_seed1:
+    backend: huggingface
+    id: EleutherAI/pythia-410m-seed1
+    revision: 33803c4f5a1e9a4bece59e52f17bb8755add33e1
+    layers: 24
+    hidden_size: 1024
+    role: independent_training_seed
 
 dataset:
   backend: huggingface
@@ -30,6 +37,7 @@ dataset:
 sampling:
   train_size: 12000
   validation_size: 2000
+  test_size: 1699
   balance_labels: true
   stratify_by: [adversarial]
   protect_test: true
@@ -43,18 +51,38 @@ activations:
   primary_depth: 0.75
   dtype: float16
   storage_dtype: float16
-  batch_size: 32
+  batch_size: 64
 
 extraction:
-  mode: smoke
-  seed: 42
-  sample_size: 100
   repeatability_rows: 8
   repeatability_atol: 0.0001
-  models: [pythia_410m]
+  models: [pythia_seed1234, pythia_seed1]
+
+probes:
+  primary_families: [linear, cp_degree_2, mlp]
+  secondary_families: [linear]
+  linear:
+    c_values: [0.01, 0.1, 1.0, 10.0]
+    max_iter: 1000
+  cp_degree_2:
+    ranks: [2, 8, 16]
+    weight_decays: [0.0, 0.0001]
+    learning_rate: 0.001
+    batch_size: 512
+    max_epochs: 60
+    patience: 8
+    restart_seeds: [42, 137]
+  mlp:
+    hidden_size: 32
+    weight_decays: [0.0, 0.0001]
+    learning_rate: 0.001
+    batch_size: 512
+    max_epochs: 60
+    patience: 8
+    restart_seeds: [42, 137]
 
 evaluation:
-  primary_metrics: [auroc]
+  primary_metrics: [auroc, auroc_transfer_gap]
   secondary_metrics:
     - auprc
     - accuracy
@@ -73,12 +101,16 @@ evaluation:
   retain_thresholds: true
   operating_fprs: [0.01, 0.05]
   threshold_selection: source_validation_balanced_accuracy
+  oracle_gate: 0.75
+  minimum_gap: 0.10
+  bootstrap_samples: 2000
+  confidence_level: 0.95
 
 tracking:
-  wandb: false
+  wandb: true
 
 artifacts:
   backend: huggingface_bucket
   bucket: baimamboukar/coordinate-concept-mismatch
-  prefix: experiments/pythia_activation_smoke
+  prefix: experiments/frozen_probe_transfer_baseline/pythia_pilot
   defer_upload: true
