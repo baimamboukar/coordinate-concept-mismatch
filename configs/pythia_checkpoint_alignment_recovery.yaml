@@ -1,0 +1,85 @@
+name: pythia_checkpoint_alignment_recovery
+runner: experiments.pythia_checkpoint_alignment_recovery:run
+seed: 42
+data_seeds: [42, 137]
+deterministic: true
+stage: natural_checkpoint_alignment
+training: false
+
+models:
+  pythia_seed1234:
+    backend: huggingface
+    id: EleutherAI/pythia-410m
+    revision: 9879c9b5f8bea9051dcb0e68dff21493d67e9d4f
+    layers: 24
+    hidden_size: 1024
+  pythia_seed1:
+    backend: huggingface
+    id: EleutherAI/pythia-410m-seed1
+    revision: 33803c4f5a1e9a4bece59e52f17bb8755add33e1
+    layers: 24
+    hidden_size: 1024
+
+materials:
+  baseline_artifact_prefix: experiments/pythia_seed_probe_transfer
+  expected_train_rows: 12000
+  expected_validation_rows: 2000
+  expected_test_rows: 1699
+
+alignment:
+  fit_split: train
+  diagnostic_split: validation
+  primary_depth: 0.75
+  depths: [0.25, 0.50, 0.75, 1.00]
+  primary_method: permutation_diagonal
+  methods:
+    - permutation
+    - permutation_diagonal
+    - orthogonal_procrustes
+    - affine_ridge
+    - quotient_ridge
+  ridge_relative_alpha: 0.0001
+  quotient_svd_relative_threshold: 0.001
+  negative_control: shuffled_affine_ridge
+  shuffled_pairing_seed: 314
+  device: auto
+
+evaluation:
+  primary_metrics: [aligned_auroc_improvement, recovery_fraction, residual_auroc_gap]
+  secondary_metrics:
+    - auroc
+    - auprc
+    - accuracy
+    - balanced_accuracy
+    - precision
+    - recall
+    - f1
+    - expected_calibration_error
+    - tn
+    - fp
+    - fn
+    - tp
+    - tpr_at_fpr
+    - achieved_fpr_at_source_threshold
+    - alignment_relative_rmse
+    - alignment_mean_cosine
+    - layerwise_results
+  retain_row_level: [row_id, label, score, probability, prediction]
+  retain_thresholds: true
+  operating_fprs: [0.01, 0.05]
+  oracle_gate: 0.75
+  minimum_raw_gap: 0.10
+  minimum_improvement: 0.05
+  minimum_recovery: 0.50
+  reference_auroc_atol: 0.00001
+  bootstrap_samples: 2000
+  confidence_level: 0.95
+
+tracking:
+  wandb: true
+
+artifacts:
+  backend: huggingface_bucket
+  bucket: baimamboukar/coordinate-concept-mismatch
+  prefix: experiments/pythia_checkpoint_alignment_recovery
+  defer_upload: true
