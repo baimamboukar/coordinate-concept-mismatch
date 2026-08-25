@@ -60,8 +60,10 @@ def validate_modern_baseline(config: dict[str, Any]) -> None:
     if (
         artifacts.get("backend") != "huggingface_bucket"
         or artifacts.get("defer_upload") is not True
+        or artifacts.get("worker_upload") is not True
+        or artifacts.get("verify_anonymously") is not True
     ):
-        raise ValueError("Workers must stage Hugging Face artifacts without uploading them.")
+        raise ValueError("Workers must publish verified activations directly to Hugging Face.")
 
     groups = config["evaluation"]["pair_groups"]
     assigned = []

@@ -91,6 +91,8 @@ def test_baseline_config_scopes_modern_pair_and_controls() -> None:
     assert config["tracking"] == {"wandb": True, "mode": "offline"}
     assert config["artifacts"]["bucket"] == "baimamboukar/coordinate-concept-mismatch"
     assert config["artifacts"]["defer_upload"] is True
+    assert config["artifacts"]["worker_upload"] is True
+    assert config["artifacts"]["verify_anonymously"] is True
     assert config["evaluation"]["primary_metrics"] == ["auroc", "auroc_transfer_gap"]
     assert config["evaluation"]["operating_fprs"] == [0.01, 0.05]
     _validate_config(config)
@@ -112,6 +114,8 @@ def test_cross_family_baseline_extension_is_prespecified() -> None:
         "transfer_gap_rows": 240,
         "probe_bundles": 10,
     }
+    assert config["artifacts"]["worker_upload"] is True
+    assert config["artifacts"]["verify_anonymously"] is True
 
 
 def test_baseline_pythia_pilot_config_is_pinned_and_valid() -> None:

@@ -148,3 +148,5 @@ artifacts:
   bucket: baimamboukar/coordinate-concept-mismatch
   prefix: experiments/frozen_probe_transfer_baseline/modern_phase
   defer_upload: true
+  worker_upload: true
+  verify_anonymously: true

@@ -183,3 +183,5 @@ artifacts:
   reuse_prefix: experiments/frozen_probe_transfer_baseline/modern_phase
   prefix: experiments/frozen_probe_transfer_baseline/cross_family_extension
   defer_upload: true
+  worker_upload: true
+  verify_anonymously: true

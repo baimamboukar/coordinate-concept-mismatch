@@ -56,9 +56,13 @@ class FakeModel(nn.Module):
 class Tracker:
     def __init__(self) -> None:
         self.logged = {}
+        self.reports = []
 
     def metrics(self, values) -> None:
         self.logged.update(values)
+
+    def report(self, title, body) -> None:
+        self.reports.append((title, body))
 
 
 def _config(rows_dir: Path, output_dir: Path) -> dict:
@@ -208,3 +212,24 @@ def test_runner_selects_one_enabled_environment_model(
     assert run_model_extraction(config, tracker) is completion
     assert selected == ["llama"]
     assert tracker.logged == {"extraction/rows": 10.0, "extraction/truncation_rate": 0.1}
+
+
+def test_runner_publishes_completed_activations_from_worker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _config(tmp_path / "rows", tmp_path / "output")
+    config["artifacts"] = {"worker_upload": True}
+    completion = SimpleNamespace(splits=(SimpleNamespace(rows=10, truncated_rows=0),))
+    published = []
+    monkeypatch.setenv("EXTRACTION_MODEL", "llama")
+    monkeypatch.setattr(
+        "probe_transfer.model_extraction.run_extraction_job", lambda *_args, **_kwargs: completion
+    )
+    monkeypatch.setattr(
+        "probe_transfer.model_extraction.publish_model_activations",
+        lambda _config, model: published.append(model) or "hf://buckets/test/activations/llama",
+    )
+
+    run_model_extraction(config, Tracker())
+
+    assert published == ["llama"]

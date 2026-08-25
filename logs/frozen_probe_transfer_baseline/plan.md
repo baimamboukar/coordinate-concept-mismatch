@@ -47,7 +47,7 @@ For the extension, the comparison-level rule is unchanged. A broad cross-family 
 ## Workflow
 
 1. Preserve and verify the existing five prepared split files, then stage the identical archive on two isolated H100 workers. Run a real checkpoint preflight before launching Mistral and Granite extraction in parallel; each worker extracts all five splits and all four depths.
-2. Retrieve the two new activation directories and verify completion metadata, repeatability, shapes, finite values, truncation, and exact row-ID and label agreement before combining them with the completed core artifacts.
+2. Validate completion metadata, repeatability, shapes, finite values, truncation, and exact row-ID and label agreement on each worker. Upload directly from that worker to Hugging Face, then anonymously re-download and byte-verify there. Activation tensors must not transit through or remain on the coordinating machine.
 3. Run the full five-model probe matrix with BASELINE_TASK=transfer in a clean staging root. Track training offline in W&B, then sync from the trusted machine.
 4. Validate all primary, secondary, low-FPR, confusion, calibration, threshold, and row-level outputs before uploading the necessary artifacts to Hugging Face. Upload is deferred on workers.
 5. Update the single baseline report and terminate both experiment GPUs after artifact retrieval is verified.

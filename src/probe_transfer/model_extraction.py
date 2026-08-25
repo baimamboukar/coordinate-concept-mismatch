@@ -3,6 +3,7 @@ from typing import Any
 
 from probe_transfer.extraction_job import run_extraction_job
 from probe_transfer.extraction_types import JobCompletion
+from probe_transfer.publication import publish_model_activations
 
 MODEL_ENV = "EXTRACTION_MODEL"
 
@@ -29,4 +30,7 @@ def run_model_extraction(config: dict[str, Any], tracker: Any) -> JobCompletion:
             "extraction/truncation_rate": total_truncated / total_rows,
         }
     )
+    if config.get("artifacts", {}).get("worker_upload") is True:
+        uri = publish_model_activations(config, model_name)
+        tracker.report("Artifacts", f"Published and anonymously verified: `{uri}`.")
     return completion
