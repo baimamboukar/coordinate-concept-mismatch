@@ -1,28 +1,28 @@
-# August 23rd, 2026 | Frozen Probe Transfer Baseline
+# August 25th, 2026 | Frozen Probe Transfer Baseline
 
-[Pythia pilot artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/pythia_seed_probe_transfer) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/hd5rdpqo) | [Experiment plan](plan.md)
+[Pythia pilot artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/pythia_seed_probe_transfer) | [Pythia pilot on Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/hd5rdpqo) | [Modern phase on Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/dpsh1n4l) | [Experiment plan](plan.md)
 
 ## Summary
 
-Experiment 1 tests whether a probe trained on one model transfers unchanged to another. We first ran the full protocol on two independently trained Pythia-410M checkpoints as a low-cost pilot. Target-trained probes reached AUROC 0.834–0.877, while frozen-transfer AUROC fell to 0.403–0.572. All 12 primary comparisons met the prespecified failure rule. This is pilot evidence for the baseline, not a separate experiment or a broad cross-family result.
+This experiment tests whether a probe trained on one model can be applied unchanged to another. The Pythia pilot first established failure across same-architecture seeds. The modern phase now establishes the prespecified pairwise result: all 24 Llama–Qwen comparisons failed, covering both directions, two data seeds, four depths, and the three probe families at the primary depth. The Llama–Nemotron lineage control failed in 0 of 24 comparisons, while the exploratory Qwen–Nemotron comparison failed in 24 of 24. This contrast is evidence that the baseline is detecting model-dependent representation mismatch rather than generic probe instability.
 
-## Pythia pilot results
+## Primary modern result
 
-Each cell reports target-oracle AUROC → frozen-transfer AUROC, followed by the gap in parentheses.
+Values are reported as seed 42 / seed 137. The table shows the primary 75%-depth linear probe.
 
-| Data seed | Direction | Linear | Degree-2 | MLP |
-| ---: | --- | ---: | ---: | ---: |
-| 42 | seed 1234 → seed 1 | 0.864 → 0.442 (0.422) | 0.865 → 0.540 (0.325) | 0.877 → 0.499 (0.378) |
-| 42 | seed 1 → seed 1234 | 0.859 → 0.471 (0.388) | 0.869 → 0.451 (0.418) | 0.875 → 0.504 (0.372) |
-| 137 | seed 1234 → seed 1 | 0.855 → 0.406 (0.450) | 0.834 → 0.572 (0.262) | 0.862 → 0.403 (0.459) |
-| 137 | seed 1 → seed 1234 | 0.856 → 0.531 (0.325) | 0.836 → 0.483 (0.353) | 0.865 → 0.503 (0.363) |
+| Direction | Target oracle AUROC | Transfer AUROC | Gap [95% CI] |
+| --- | ---: | ---: | ---: |
+| Llama $\rightarrow$ Qwen | 0.933 / 0.934 | 0.599 / 0.503 | 0.334 [0.308, 0.361] / 0.432 [0.401, 0.461] |
+| Qwen $\rightarrow$ Llama | 0.932 / 0.929 | 0.504 / 0.440 | 0.429 [0.399, 0.459] / 0.489 [0.459, 0.521] |
+| Llama $\rightarrow$ Nemotron | 0.898 / 0.907 | 0.873 / 0.871 | 0.025 [0.012, 0.038] / 0.035 [0.022, 0.048] |
+| Nemotron $\rightarrow$ Llama | 0.932 / 0.929 | 0.888 / 0.887 | 0.045 [0.035, 0.055] / 0.042 [0.032, 0.052] |
 
-Every paired 95% bootstrap interval excluded zero. At 1% FPR, median TPR fell from 13.9–22.4% for target-trained probes to 1.0–1.3% after frozen transfer. Full metrics, predictions, activations, probes, and thresholds are in the linked Hugging Face folder.
+At a target-specific 1% FPR, Llama–Qwen transfer TPR was only 0.5–2.4%, compared with 37.4–48.1% for target-trained probes. Source thresholds selected for 1% FPR detected no positive examples after Llama–Qwen transfer. The lineage control preserved AUROC but not calibration: the Llama source threshold produced 23.1–25.7% FPR on Nemotron. All requested secondary metrics, confusion counts, thresholds, and row-level predictions passed validation.
 
-## Interpretation
+## Pythia pilot
 
-The pilot establishes that raw frozen-probe transfer can fail even across same-architecture training runs, and nonlinear probe capacity does not remove the gap. It does not establish broad failure across modern model families or explain whether the mismatch is coordinate-based or conceptual.
+Across two Pythia-410M training seeds, target-trained probes reached AUROC 0.834–0.877 while frozen-transfer AUROC fell to 0.403–0.572. All 12 primary pilot comparisons met the failure rule, and adding degree-2 or MLP capacity did not remove the gap.
 
-## Progression
+## Interpretation and next step
 
-The residual-permutation control can now test whether coordinate mismatch alone is sufficient. Llama, Mistral, Qwen, and Nemotron remain the pending higher-cost phase of this same baseline experiment and will extend—not replace—the Pythia result.
+The baseline goal is achieved for the independent Llama–Qwen pair, with Llama–Nemotron providing a useful lineage-sensitive control. This is not yet a broad three-family result because Mistral remains pending. It also does not distinguish coordinate mismatch from concept mismatch. The next experiment therefore applies controlled, function-preserving symmetries and measures both AUROC recovery and source-threshold stability under exact probe transport.
