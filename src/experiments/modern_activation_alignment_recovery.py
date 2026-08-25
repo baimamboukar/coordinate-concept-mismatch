@@ -121,8 +121,12 @@ def _validate_config(config: dict[str, Any]) -> None:
         raise ValueError("The expected primary-depth output counts changed.")
     if config.get("tracking") != {"wandb": True, "mode": "offline"}:
         raise ValueError("Alignment fitting must use offline W&B tracking.")
-    if config.get("execution") != {"accelerator": "H100", "gpu_count": 1}:
-        raise ValueError("The modern alignment run requires one H100.")
+    if config.get("execution") != {
+        "accelerator": "H100",
+        "gpu_count": 1,
+        "minimum_cuda_driver_support": 13.0,
+    }:
+        raise ValueError("The modern alignment run requires one CUDA-13-compatible H100.")
     artifacts = config["artifacts"]
     if (
         artifacts.get("backend") != "huggingface_bucket"

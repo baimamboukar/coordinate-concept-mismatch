@@ -38,6 +38,7 @@ The denominator is not interpreted when the raw gap is below 0.10.
 - **Repetitions:** data seeds 42 and 137 are separate alignment-fitting repetitions on the same protected 1,699-row test set, not independent test replications.
 
 All models have 4,096-dimensional residual streams. The experiment reuses the exact 12,000 training, 2,000 validation, and 1,699 test rows from the completed baseline.
+Execution requires one H100 on a host advertising CUDA 13.0 or newer driver support, matching the frozen PyTorch environment.
 
 ## Alignment methods
 

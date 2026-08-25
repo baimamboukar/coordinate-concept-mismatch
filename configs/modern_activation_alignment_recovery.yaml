@@ -104,6 +104,7 @@ expected_outputs:
 execution:
   accelerator: H100
   gpu_count: 1
+  minimum_cuda_driver_support: 13.0
 
 tracking:
   wandb: true

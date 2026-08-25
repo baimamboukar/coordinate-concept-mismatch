@@ -21,6 +21,7 @@ def test_modern_alignment_protocol_is_prespecified() -> None:
     assert config["alignment"]["primary_probe_family"] == "linear"
     assert config["evaluation"]["bootstrap_samples"] == 2000
     assert config["expected_outputs"]["prediction_rows"] == 448536
+    assert config["execution"]["minimum_cuda_driver_support"] == 13.0
 
 
 def test_two_model_alignment_retains_bidirectional_primary_default() -> None:
