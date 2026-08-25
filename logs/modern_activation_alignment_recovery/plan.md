@@ -81,9 +81,9 @@ The comparison-level recovery rule is unchanged. An experiment-level broad restr
 1. Download the verified modern baseline prefix from Hugging Face and reproduce every raw, source-oracle, and target-oracle AUROC before fitting maps.
 2. Fit each alignment on paired training activations and evaluate reconstruction diagnostics on validation activations.
 3. Evaluate frozen probes on the untouched test rows, compute paired recovery intervals, and validate all expected output counts and metric fields.
-4. Track the run offline in Weights & Biases, retrieve it to the trusted machine, and upload the verified results to the project Hugging Face bucket.
-5. Write the concise dated report and terminate the compute worker only after retrieval and remote artifact verification.
+4. Track the run offline in Weights & Biases, then sync both W&B and the verified results directly from the worker. Anonymously re-download and byte-verify the Hugging Face files on that worker; bulky artifacts must not transit through the coordinating machine.
+5. Write the concise dated report and terminate the compute worker only after remote artifact verification.
 
 ## Interpretation boundary
 
-Restricted recovery estimates the component compatible with that tested activation-coordinate class. Flexible linear recovery shows linear predictability only. Failure of the tested maps does not prove concept mismatch, and success does not show that independently trained models are related by an exact parameter-space symmetry. Cross-family generality remains incomplete until Mistral is added.
+Restricted recovery estimates the component compatible with that tested activation-coordinate class. Flexible linear recovery shows linear predictability only. Failure of the tested maps does not prove concept mismatch, and success does not show that independently trained models are related by an exact parameter-space symmetry.
