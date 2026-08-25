@@ -1,4 +1,6 @@
+import re
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -14,18 +16,35 @@ def validate_cuda_runtime(execution: dict[str, Any]) -> dict[str, Any]:
     memory_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
     if memory_gb < execution["minimum_gpu_memory_gb"]:
         raise RuntimeError(f"GPU memory is {memory_gb:.1f} GiB; expected at least 75 GiB.")
-    runtime = torch.version.cuda
-    if (
-        runtime is None
-        or float(".".join(runtime.split(".")[:2])) < execution["minimum_cuda_driver_support"]
-    ):
-        raise RuntimeError(f"CUDA runtime {runtime!r} does not satisfy the frozen environment.")
+    driver_support = _cuda_driver_support_version()
+    if driver_support < execution["minimum_cuda_driver_support"]:
+        raise RuntimeError(
+            f"CUDA driver support {driver_support} does not satisfy the frozen environment."
+        )
     if not torch.cuda.is_bf16_supported():
         raise RuntimeError("The selected GPU does not support bfloat16.")
     probe = torch.ones((16, 16), device="cuda", dtype=torch.bfloat16)
     if not torch.isfinite(probe @ probe).all():
         raise RuntimeError("The CUDA bfloat16 execution smoke test failed.")
-    return {"gpu": name, "memory_gb": memory_gb, "cuda_runtime": runtime}
+    return {
+        "gpu": name,
+        "memory_gb": memory_gb,
+        "cuda_runtime": torch.version.cuda,
+        "cuda_driver_support": driver_support,
+    }
+
+
+def _cuda_driver_support_version() -> float:
+    try:
+        result = subprocess.run(
+            ["nvidia-smi"], capture_output=True, check=True, text=True, timeout=10
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        raise RuntimeError("Unable to verify CUDA driver support with nvidia-smi.") from error
+    match = re.search(r"CUDA Version:\s*([0-9]+\.[0-9]+)", result.stdout)
+    if match is None:
+        raise RuntimeError("nvidia-smi did not report CUDA driver support.")
+    return float(match.group(1))
 
 
 def validate_free_disk(path: Path, minimum_gb: float) -> float:
