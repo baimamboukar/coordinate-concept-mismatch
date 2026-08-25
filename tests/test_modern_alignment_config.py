@@ -31,3 +31,19 @@ def test_two_model_alignment_retains_bidirectional_primary_default() -> None:
         ("first", "second", "primary"),
         ("second", "first", "primary"),
     ]
+
+
+def test_cross_family_alignment_extension_is_prespecified() -> None:
+    root = Path(__file__).parents[1]
+    path = root / "configs" / "modern_activation_alignment_recovery_cross_family_extension.yaml"
+    config = load_config(path)
+
+    _validate_config(config)
+    assert len(direction_groups(config)) == 10
+    assert all(group == "primary" for _, _, group in direction_groups(config))
+    assert config["expected_outputs"] == {
+        "metrics_rows": 440,
+        "prediction_rows": 747560,
+        "recovery_rows": 320,
+        "alignment_diagnostic_rows": 120,
+    }

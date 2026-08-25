@@ -2,7 +2,7 @@
 
 ## Objective
 
-Determine whether a probe trained on one modern language model retains predictive performance when applied unchanged to another model with a compatible activation width. The completed Pythia pilot established same-architecture transfer failure. This phase extends the same experiment to an independent-family pair and a model-lineage control.
+Determine whether a probe trained on one modern language model retains predictive performance when applied unchanged to another model with a compatible activation width. The completed Pythia pilot established same-architecture transfer failure, and the completed core phase established Llama–Qwen failure with a Llama–Nemotron lineage control. The pending extension tests whether that result generalizes to Mistral and Granite.
 
 ## Formal setup
 
@@ -24,8 +24,9 @@ where the first term is the target-trained oracle and the second is the unchange
 - **Primary independent-family comparison:** Llama-3.1-8B-Instruct $\rightarrow$ Qwen3-8B and Qwen3-8B $\rightarrow$ Llama-3.1-8B-Instruct.
 - **Lineage control:** Llama-3.1-8B-Instruct $\leftrightarrow$ Llama-3.1-Nemotron-Nano-8B-v1.
 - **Exploratory comparison:** Qwen3-8B $\leftrightarrow$ Nemotron.
+- **Cross-family extension:** add mistralai/Mistral-7B-v0.3 and ibm-granite/granite-3.3-8b-base at immutable revisions. The ten primary directions are every new directed pair among Llama, Qwen, Mistral, and Granite; pairs involving Nemotron remain controls or exploratory.
 
-All three models expose 4,096-dimensional residual streams, permitting direct frozen transfer without an adapter. The Pythia pilot and this phase answer the same question and remain one experiment. The prespecified broader Llama–Mistral–Qwen claim is still pending because this run contains only two independent model families.
+All five models expose 4,096-dimensional residual streams, permitting direct frozen transfer without an adapter. The Pythia pilot, completed core phase, and cross-family extension answer the same question and remain one experiment.
 
 ## Shared protocol
 
@@ -41,15 +42,15 @@ Primary outcomes are target AUROC and paired AUROC transfer gap at 75% depth. A 
 
 Secondary outcomes are AUPRC, accuracy, balanced accuracy, precision, recall, F1, calibration error, `tn/fp/fn/tp`, TPR at 1% and 5% FPR, achieved target operating points under source thresholds, and results by layer. Row IDs, labels, scores, probabilities, predictions, and thresholds are retained.
 
-This run can establish only pairwise Llama–Qwen failure. Llama–Nemotron is interpreted as a lineage control and Qwen–Nemotron as exploratory. Broad linear-probe transfer failure still requires at least four of the six directed Llama–Mistral–Qwen transfers to fail with a median gap of at least 0.10; that gate cannot be evaluated until Mistral is added.
+For the extension, the comparison-level rule is unchanged. A broad cross-family result requires all twenty primary 75%-depth linear direction-seed comparisons—ten directions under two data seeds—to meet the failure rule. Otherwise, conclusions remain pair-specific. The full five-model baseline must contain exactly 300 metric rows, 509,700 row-level predictions, 240 transfer-gap rows, and ten probe bundles.
 
 ## Workflow
 
-1. Materialize and verify the five prepared split files once on the trusted machine, then stage the identical files on three isolated H100 workers. Launch one model per worker in parallel, selected with `EXTRACTION_MODEL`; each worker extracts all five splits and all four depths.
-2. Retrieve the three activation directories and verify repeatability, shapes, finite values, truncation, and exact row-ID and label agreement before combining them.
-3. Run consolidated probe training and evaluation with `BASELINE_TASK=transfer`. Track training offline in W&B, then sync from the trusted machine.
+1. Preserve and verify the existing five prepared split files, then stage the identical archive on two isolated H100 workers. Run a real checkpoint preflight before launching Mistral and Granite extraction in parallel; each worker extracts all five splits and all four depths.
+2. Retrieve the two new activation directories and verify completion metadata, repeatability, shapes, finite values, truncation, and exact row-ID and label agreement before combining them with the completed core artifacts.
+3. Run the full five-model probe matrix with BASELINE_TASK=transfer in a clean staging root. Track training offline in W&B, then sync from the trusted machine.
 4. Validate all primary, secondary, low-FPR, confusion, calibration, threshold, and row-level outputs before uploading the necessary artifacts to Hugging Face. Upload is deferred on workers.
-5. Update the single baseline report and terminate all three experiment GPUs after artifact retrieval is verified.
+5. Update the single baseline report and terminate both experiment GPUs after artifact retrieval is verified.
 
 ## Interpretation boundary
 

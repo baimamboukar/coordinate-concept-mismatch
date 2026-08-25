@@ -270,6 +270,6 @@ def _bootstrap_seed(base: int, key: tuple[Any, ...], models: list[str]) -> int:
         + int(data_seed) * 10_000
         + round(float(depth) * 100) * 100
         + families.index(str(family)) * 10
-        + models.index(str(source)) * 2
+        + models.index(str(source)) * len(models)
         + models.index(str(target))
     )

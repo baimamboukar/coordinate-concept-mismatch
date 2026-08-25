@@ -2,7 +2,7 @@ import gc
 import json
 import os
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -16,52 +16,20 @@ from probe_transfer.activations import (
     save_activation_file,
 )
 from probe_transfer.artifacts import write_json
+from probe_transfer.atomic import atomic_directory
 from probe_transfer.data import load_prepared_rows
+from probe_transfer.extraction_types import JobCompletion, PreparedSplit, SplitCompletion
 from probe_transfer.models import load_activation_model
+from probe_transfer.runtime import (
+    validate_cuda_runtime,
+    validate_free_disk,
+    validate_loaded_model,
+)
 
 MODEL_ENV = "EXTRACTION_MODEL"
 ROWS_ENV = "ACTIVATION_ROWS_DIR"
 STAGING_ENV = "ACTIVATION_STAGING_DIR"
 DATA_SEEDS = (42, 137)
-
-
-@dataclass(frozen=True)
-class PreparedSplit:
-    name: str
-    expected_rows: int
-    balanced: bool
-    data_seed: int | None = None
-
-    @property
-    def input_name(self) -> str:
-        return f"{self.name}.jsonl"
-
-    @property
-    def output_name(self) -> str:
-        return f"{self.name}.safetensors"
-
-
-@dataclass(frozen=True)
-class SplitCompletion:
-    split: str
-    data_seed: int | None
-    path: str
-    rows: int
-    truncated_rows: int
-    truncation_rate: float
-
-
-@dataclass(frozen=True)
-class JobCompletion:
-    schema_version: int
-    status: str
-    model_name: str
-    model_id: str
-    model_revision: str
-    block_indices: tuple[int, ...]
-    normalized_depths: tuple[float, ...]
-    splits: tuple[SplitCompletion, ...]
-
 
 ModelLoader = Callable[..., tuple[Any, Any]]
 
@@ -84,69 +52,74 @@ def run_extraction_job(
     activations = config["activations"]
     model_config = config["models"][selected]
     model_output = staging_root / "activations" / selected
-    if model_output.exists():
-        raise FileExistsError(f"Refusing to overwrite model activations: {model_output}")
+    prepared = load_prepared_splits(prepared_root, splits)
+    execution = config.get("execution")
+    if execution:
+        validate_free_disk(staging_root, execution["minimum_disk_free_gb"])
+        validate_cuda_runtime(execution)
 
     tokenizer, model = model_loader(
         model_config["id"],
         model_config["revision"],
         dtype=activations["dtype"],
     )
+    if execution:
+        validate_loaded_model(
+            model,
+            layers=model_config["layers"],
+            hidden_size=model_config["hidden_size"],
+        )
     completed: list[SplitCompletion] = []
     block_indices: tuple[int, ...] | None = None
     try:
-        model_output.mkdir(parents=True)
-        for split in splits:
-            input_path = prepared_root / split.input_name
-            rows = load_prepared_rows(
-                input_path,
-                split.expected_rows,
-                require_balanced=split.balanced,
+        with atomic_directory(model_output) as working_output:
+            for split, rows in prepared:
+                input_path = prepared_root / split.input_name
+                tensors, stats = extract_rows(rows, tokenizer, model, model_config, activations)
+                _assert_truncation(stats, float(activations["max_truncation_rate"]), input_path)
+                repeated, _ = extract_rows(
+                    rows[: config["extraction"]["repeatability_rows"]],
+                    tokenizer,
+                    model,
+                    model_config,
+                    activations,
+                )
+                assert_repeatable(
+                    tensors,
+                    repeated,
+                    rows=config["extraction"]["repeatability_rows"],
+                    atol=config["extraction"]["repeatability_atol"],
+                )
+                output_path = working_output / split.output_name
+                save_activation_file(
+                    output_path,
+                    tensors,
+                    _metadata(config, model_config, split, stats),
+                )
+                _assert_saved_alignment(output_path, rows, activations["normalized_depths"])
+                block_indices = stats.block_indices
+                completed.append(_completion(selected, split, stats))
+                del tensors, repeated
+
+            if block_indices is None:
+                raise RuntimeError("No activation splits were extracted.")
+            completion = JobCompletion(
+                schema_version=1,
+                status="complete",
+                model_name=selected,
+                model_id=model_config["id"],
+                model_revision=model_config["revision"],
+                block_indices=block_indices,
+                normalized_depths=tuple(float(depth) for depth in activations["normalized_depths"]),
+                splits=tuple(completed),
             )
-            tensors, stats = _extract(rows, tokenizer, model, model_config, activations)
-            _assert_truncation(stats, float(activations["max_truncation_rate"]), input_path)
-            repeated, _ = _extract(
-                rows[: config["extraction"]["repeatability_rows"]],
-                tokenizer,
-                model,
-                model_config,
-                activations,
-            )
-            assert_repeatable(
-                tensors,
-                repeated,
-                rows=config["extraction"]["repeatability_rows"],
-                atol=config["extraction"]["repeatability_atol"],
-            )
-            output_path = model_output / split.output_name
-            save_activation_file(
-                output_path,
-                tensors,
-                _metadata(config, model_config, split, stats),
-            )
-            _assert_saved_alignment(output_path, rows, activations["normalized_depths"])
-            block_indices = stats.block_indices
-            completed.append(_completion(selected, split, stats))
-            del tensors, repeated
+            write_json(working_output / "completion.json", asdict(completion))
     finally:
         del model, tokenizer
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    if block_indices is None:
-        raise RuntimeError("No activation splits were extracted.")
-    completion = JobCompletion(
-        schema_version=1,
-        status="complete",
-        model_name=selected,
-        model_id=model_config["id"],
-        model_revision=model_config["revision"],
-        block_indices=block_indices,
-        normalized_depths=tuple(float(depth) for depth in activations["normalized_depths"]),
-        splits=tuple(completed),
-    )
-    write_json(model_output / "completion.json", asdict(completion))
     return completion
 
 
@@ -185,6 +158,22 @@ def prepared_splits(config: Mapping[str, Any]) -> tuple[PreparedSplit, ...]:
     return tuple(splits)
 
 
+def load_prepared_splits(
+    root: Path, splits: tuple[PreparedSplit, ...]
+) -> list[tuple[PreparedSplit, list[dict[str, Any]]]]:
+    return [
+        (
+            split,
+            load_prepared_rows(
+                root / split.input_name,
+                split.expected_rows,
+                require_balanced=split.balanced,
+            ),
+        )
+        for split in splits
+    ]
+
+
 def _resolve_path(
     explicit: str | Path | None,
     environment_name: str,
@@ -221,7 +210,7 @@ def _validate_settings(config: Mapping[str, Any], splits: tuple[PreparedSplit, .
         raise ValueError("max_truncation_rate must lie in [0, 1].")
 
 
-def _extract(
+def extract_rows(
     rows: list[dict[str, Any]],
     tokenizer: Any,
     model: Any,

@@ -1,10 +1,22 @@
 from typing import Any
 
+PHASE_MODELS = {
+    "core": ("llama", "qwen", "nemotron"),
+    "cross_family_extension": ("llama", "qwen", "nemotron", "mistral", "granite"),
+}
+PHASE_EXTRACTIONS = {
+    "core": ("llama", "qwen", "nemotron"),
+    "cross_family_extension": ("mistral", "granite"),
+}
+
 
 def validate_modern_baseline(config: dict[str, Any]) -> None:
+    phase = config.get("phase", "core")
+    if phase not in PHASE_MODELS:
+        raise ValueError(f"Unsupported modern baseline phase: {phase}")
     models = list(config["models"])
-    if models != ["llama", "qwen", "nemotron"]:
-        raise ValueError("The current modern phase requires Llama, Qwen, and Nemotron in order.")
+    if tuple(models) != PHASE_MODELS[phase]:
+        raise ValueError(f"The {phase} model order changed.")
     if {model["hidden_size"] for model in config["models"].values()} != {4096}:
         raise ValueError("Direct transfer requires 4,096-dimensional residual streams.")
 
@@ -28,10 +40,13 @@ def validate_modern_baseline(config: dict[str, Any]) -> None:
         raise ValueError("Only raw prompts and last-non-padding activations are supported.")
 
     extraction = config["extraction"]
-    if extraction.get("mode") != "full" or extraction.get("models") != models:
-        raise ValueError("The modern baseline must fully extract every configured model in order.")
+    expected_extractions = list(PHASE_EXTRACTIONS[phase])
+    if extraction.get("mode") != "full" or extraction.get("models") != expected_extractions:
+        raise ValueError(f"The {phase} extraction model contract changed.")
     jobs = extraction.get("jobs", [])
-    if {job.get("model") for job in jobs} != set(models) or len(jobs) != len(models):
+    if {job.get("model") for job in jobs} != set(expected_extractions) or len(jobs) != len(
+        expected_extractions
+    ):
         raise ValueError("The modern baseline requires exactly one extraction job per model.")
     if any(job.get("accelerator") != "H100" or job.get("gpu_count") != 1 for job in jobs):
         raise ValueError("Each modern extraction job requires one H100.")
@@ -50,13 +65,37 @@ def validate_modern_baseline(config: dict[str, Any]) -> None:
 
     groups = config["evaluation"]["pair_groups"]
     assigned = []
-    for group in ("primary", "lineage_control", "exploratory"):
-        for source, target in groups.get(group, []):
+    for group, pairs in groups.items():
+        for source, target in pairs:
             if source not in models or target not in models or source == target:
                 raise ValueError(f"Invalid {group} transfer pair: {source} -> {target}")
             assigned.append((source, target))
     expected = {(source, target) for source in models for target in models if source != target}
     if len(assigned) != len(set(assigned)) or set(assigned) != expected:
         raise ValueError("Every directed model pair must belong to exactly one comparison group.")
-    if config.get("claims", {}).get("broad_three_family") != "pending":
-        raise ValueError("The three-family claim must remain pending until Mistral is evaluated.")
+    claim = "broad_three_family" if phase == "core" else "broad_cross_family"
+    if config.get("claims", {}).get(claim) != "pending":
+        raise ValueError(f"The {claim} claim must remain pending until evaluation.")
+
+    execution = config.get("execution")
+    if execution != {
+        "accelerator": "H100",
+        "gpu_count": 1,
+        "minimum_cuda_driver_support": 13.0,
+        "minimum_gpu_memory_gb": 75,
+        "minimum_disk_free_gb": 50,
+    }:
+        raise ValueError("The modern extraction runtime contract changed.")
+
+    family_depths = len(config["data_seeds"]) * (
+        len(activations["normalized_depths"]) - 1 + len(config["probes"]["primary_families"])
+    )
+    model_count = len(models)
+    expected_outputs = {
+        "metrics_rows": family_depths * model_count**2,
+        "prediction_rows": family_depths * model_count**2 * sampling["test_size"],
+        "transfer_gap_rows": family_depths * model_count * (model_count - 1),
+        "probe_bundles": len(config["data_seeds"]) * model_count,
+    }
+    if config.get("expected_outputs") != expected_outputs:
+        raise ValueError("The expected modern baseline output counts changed.")

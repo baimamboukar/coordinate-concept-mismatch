@@ -17,6 +17,7 @@ from probe_transfer.activations import (
 )
 from probe_transfer.baseline_config import validate_modern_baseline
 from probe_transfer.baseline_transfer import run_staged_transfer
+from probe_transfer.extraction_preflight import run_extraction_preflight
 from probe_transfer.model_extraction import run_model_extraction
 from probe_transfer.models import load_activation_model
 
@@ -30,7 +31,9 @@ def run(config: dict[str, Any], tracker: Tracker) -> None:
         _extract_activation_smoke(config, tracker)
     elif stage == "modern_baseline":
         task = os.getenv("BASELINE_TASK", "extract")
-        if task == "extract":
+        if task == "preflight":
+            run_extraction_preflight(config, tracker)
+        elif task == "extract":
             run_model_extraction(config, tracker)
         elif task == "transfer":
             run_staged_transfer(config, tracker)
@@ -209,31 +212,19 @@ def _activation_metadata(config: dict[str, Any], model_name: str, stats: Any) ->
 def _report_smoke_test(
     tracker: Tracker, artifacts: dict[str, Any], seed: int, uploaded: list[Any]
 ) -> None:
-    lines = [
-        f"| {name} | {stats.rows} | {stats.truncation_rate:.2%} | `{artifact.sha256}` |"
-        for name, stats, artifact in uploaded
-    ]
+    summary = ", ".join(f"{name}: {stats.rows} rows" for name, stats, _ in uploaded)
     tracker.report(
         "Activation smoke test",
-        "| Model | Rows | Truncated | SHA-256 |\n"
-        "| --- | ---: | ---: | --- |\n"
-        + "\n".join(lines)
-        + f"\n\nBucket: `hf://buckets/{artifacts['bucket']}/"
+        f"{summary}. Stored under `hf://buckets/{artifacts['bucket']}/"
         f"{artifacts['prefix']}/activations/smoke/seed_{seed}/`.",
     )
 
 
 def _report_staged_activations(tracker: Tracker, extracted: list[Any]) -> None:
-    lines = [
-        f"| {name} | {stats.rows} | {stats.truncation_rate:.2%} | `{path}` | `{sha256}` |"
-        for name, path, stats, sha256 in extracted
-    ]
+    summary = ", ".join(f"{name}: {stats.rows} rows" for name, _, stats, _ in extracted)
     tracker.report(
         "Activation smoke test",
-        "| Model | Rows | Truncated | Staged file | SHA-256 |\n"
-        "| --- | ---: | ---: | --- | --- |\n"
-        + "\n".join(lines)
-        + "\n\nUpload was deferred so the worker did not receive Hugging Face credentials.",
+        f"{summary}. Upload remains deferred until trusted-machine validation.",
     )
 
 

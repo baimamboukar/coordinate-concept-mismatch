@@ -11,7 +11,6 @@ def is_pinned_hf_revision(revision: Any) -> bool:
 
 
 def seed_everything(seed: int, deterministic: bool = True) -> None:
-    os.environ["PYTHONHASHSEED"] = str(seed)
     os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     random.seed(seed)
 
@@ -37,3 +36,8 @@ def seed_everything(seed: int, deterministic: bool = True) -> None:
             torch.backends.cudnn.allow_tf32 = False
     except ModuleNotFoundError:
         pass
+
+
+def require_process_hash_seed(seed: int) -> None:
+    if os.getenv("PYTHONHASHSEED") != str(seed):
+        raise RuntimeError(f"Start Python with PYTHONHASHSEED={seed} for deterministic execution.")

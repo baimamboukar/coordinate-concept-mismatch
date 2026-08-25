@@ -152,14 +152,42 @@ def test_enforces_test_size_and_truncation_before_completion(tmp_path: Path) -> 
     _prepared_data(rows_dir)
     config = _config(rows_dir, output_dir)
     config["sampling"]["test_size"] = 4
+    loaded = False
+
+    def loader(*_args, **_kwargs):
+        nonlocal loaded
+        loaded = True
+        return FakeTokenizer(), FakeModel()
 
     with pytest.raises(ValueError, match="Expected 4 prepared rows"):
         run_extraction_job(
             config,
             model_name="llama",
-            model_loader=lambda *_args, **_kwargs: (FakeTokenizer(), FakeModel()),
+            model_loader=loader,
         )
+    assert loaded is False
     assert not (output_dir / "activations" / "llama" / "completion.json").exists()
+
+
+def test_failed_extraction_leaves_no_partial_model_directory(tmp_path: Path) -> None:
+    rows_dir = tmp_path / "rows"
+    output_dir = tmp_path / "staged"
+    _prepared_data(rows_dir)
+
+    class FailingModel(FakeModel):
+        def forward(self, *_args, **_kwargs):
+            raise RuntimeError("forward failed")
+
+    with pytest.raises(RuntimeError, match="forward failed"):
+        run_extraction_job(
+            _config(rows_dir, output_dir),
+            model_name="llama",
+            model_loader=lambda *_args, **_kwargs: (FakeTokenizer(), FailingModel()),
+        )
+
+    activation_root = output_dir / "activations"
+    assert not (activation_root / "llama").exists()
+    assert not list(activation_root.glob(".llama-*"))
 
 
 def test_runner_selects_one_enabled_environment_model(

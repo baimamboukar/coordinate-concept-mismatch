@@ -96,6 +96,24 @@ def test_baseline_config_scopes_modern_pair_and_controls() -> None:
     _validate_config(config)
 
 
+def test_cross_family_baseline_extension_is_prespecified() -> None:
+    path = CONFIGS_DIR / "frozen_probe_transfer_baseline_cross_family_extension.yaml"
+    config = load_config(path)
+
+    _validate_config(config)
+    assert list(config["models"]) == ["llama", "qwen", "nemotron", "mistral", "granite"]
+    assert config["extraction"]["models"] == ["mistral", "granite"]
+    assert config["models"]["mistral"]["layers"] == 32
+    assert config["models"]["granite"]["layers"] == 40
+    assert len(config["evaluation"]["pair_groups"]["primary"]) == 10
+    assert config["expected_outputs"] == {
+        "metrics_rows": 300,
+        "prediction_rows": 509700,
+        "transfer_gap_rows": 240,
+        "probe_bundles": 10,
+    }
+
+
 def test_baseline_pythia_pilot_config_is_pinned_and_valid() -> None:
     config = load_config(CONFIGS_DIR / "frozen_probe_transfer_baseline_pythia_pilot.yaml")
 

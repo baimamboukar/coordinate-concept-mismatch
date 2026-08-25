@@ -4,7 +4,7 @@ import torch
 
 from core.tracking import Tracker
 from probe_transfer.activations import save_activation_file
-from probe_transfer.transfer import run_transfer
+from probe_transfer.transfer import _bootstrap_seed, run_transfer
 
 
 def _write_split(path: Path, values: list[float], labels: list[int]) -> None:
@@ -58,3 +58,15 @@ def test_transfer_pipeline_detects_synthetic_coordinate_failure(tmp_path: Path) 
     assert all(gap["auroc_gap"] == 1.0 for gap in gaps)
     assert "results/metrics.jsonl" in checksums
     assert (tmp_path / "results" / "predictions.jsonl").is_file()
+
+
+def test_bootstrap_seeds_are_unique_for_five_model_directions() -> None:
+    models = ["llama", "qwen", "nemotron", "mistral", "granite"]
+    seeds = {
+        _bootstrap_seed(42, (137, 0.75, "linear", source, target), models)
+        for source in models
+        for target in models
+        if source != target
+    }
+
+    assert len(seeds) == 20

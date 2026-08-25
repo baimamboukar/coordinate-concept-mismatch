@@ -1,10 +1,15 @@
+import json
+import math
 import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from safetensors import safe_open
 
 from core.tracking import Tracker
+from probe_transfer.atomic import publish_directories
+from probe_transfer.models import resolve_block_indices
 from probe_transfer.transfer import run_transfer
 
 
@@ -16,13 +21,18 @@ def run_staged_transfer(config: dict[str, Any], tracker: Tracker) -> None:
         if path.exists():
             raise FileExistsError(f"Refusing to overwrite existing output: {path}")
 
-    gaps, _ = run_transfer(output_dir, config, tracker)
+    with TemporaryDirectory(prefix=".transfer-", dir=output_dir) as temporary:
+        staging = Path(temporary)
+        (staging / "activations").symlink_to(output_dir / "activations", target_is_directory=True)
+        gaps, _ = run_transfer(staging, config, tracker)
+        _validate_outputs(staging, config)
+        publish_directories(staging, output_dir, ("probes", "results"))
     primary = [row for row in gaps if row["pair_group"] == "primary"]
     failures = sum(bool(row["transfer_failed"]) for row in primary)
     tracker.report(
         "Summary",
         f"Completed {len(gaps)} directed probe-transfer comparisons across all layers, "
-        f"probe families, and data seeds. The primary Llama/Qwen group contained "
+        f"probe families, and data seeds. The configured primary group contained "
         f"{len(primary)} comparisons, of which {failures} met the direction-level "
         "prespecified failure rule.",
     )
@@ -55,6 +65,8 @@ def _validate_activations(output_dir: Path, config: dict[str, Any]) -> None:
         completion = model_dir / "completion.json"
         if not completion.is_file():
             missing.append(str(completion))
+        else:
+            _validate_completion(completion, model_name, model, expected, config)
         for split, rows in expected.items():
             path = model_dir / f"{split}.safetensors"
             if not path.is_file():
@@ -76,3 +88,97 @@ def _validate_activations(output_dir: Path, config: dict[str, Any]) -> None:
 
     if missing:
         raise FileNotFoundError(f"Missing staged activation files: {missing}")
+
+
+def _validate_completion(
+    path: Path,
+    model_name: str,
+    model: dict[str, Any],
+    expected_splits: dict[str, int],
+    config: dict[str, Any],
+) -> None:
+    completion = json.loads(path.read_text())
+    expected = {
+        "status": "complete",
+        "model_name": model_name,
+        "model_id": model["id"],
+        "model_revision": model["revision"],
+        "block_indices": resolve_block_indices(
+            model["layers"], config["activations"]["normalized_depths"]
+        ),
+        "normalized_depths": config["activations"]["normalized_depths"],
+    }
+    if any(completion.get(name) != value for name, value in expected.items()):
+        raise ValueError(f"Activation completion contract changed: {path}")
+    splits = completion.get("splits", [])
+    actual = {record.get("split"): record.get("rows") for record in splits}
+    if len(splits) != len(actual) or actual != expected_splits:
+        raise ValueError(f"Activation split completion contract changed: {path}")
+
+
+def _validate_outputs(output_dir: Path, config: dict[str, Any]) -> None:
+    expected = config["expected_outputs"]
+    contracts = {
+        "metrics_rows": (
+            output_dir / "results" / "metrics.jsonl",
+            {"data_seed", "depth", "probe_family", "source_model", "evaluation_model", "auroc"},
+        ),
+        "prediction_rows": (
+            output_dir / "results" / "predictions.jsonl",
+            {
+                "data_seed",
+                "depth",
+                "probe_family",
+                "source_model",
+                "evaluation_model",
+                "row_id",
+                "label",
+                "score",
+                "probability",
+                "prediction",
+            },
+        ),
+        "transfer_gap_rows": (
+            output_dir / "results" / "transfer_gaps.jsonl",
+            {
+                "data_seed",
+                "depth",
+                "probe_family",
+                "source_model",
+                "target_model",
+                "pair_group",
+                "auroc_gap",
+                "ci_lower",
+                "ci_upper",
+                "transfer_failed",
+            },
+        ),
+    }
+    for name, (path, fields) in contracts.items():
+        _validate_jsonl(path, expected[name], fields)
+
+    actual_bundles = {
+        path.relative_to(output_dir).as_posix()
+        for path in (output_dir / "probes").glob("seed_*/*.safetensors")
+    }
+    expected_bundles = {
+        f"probes/seed_{seed}/{model}.safetensors"
+        for seed in config["data_seeds"]
+        for model in config["models"]
+    }
+    if actual_bundles != expected_bundles or len(actual_bundles) != expected["probe_bundles"]:
+        raise ValueError("Probe bundle output contract changed.")
+
+
+def _validate_jsonl(path: Path, expected_rows: int, required: set[str]) -> None:
+    rows = 0
+    with path.open() as handle:
+        for line in handle:
+            row = json.loads(line)
+            if not required.issubset(row):
+                raise ValueError(f"Missing required fields in {path}.")
+            if any(isinstance(value, float) and not math.isfinite(value) for value in row.values()):
+                raise ValueError(f"Non-finite value in {path}.")
+            rows += 1
+    if rows != expected_rows:
+        raise ValueError(f"Expected {expected_rows} rows in {path}, found {rows}.")

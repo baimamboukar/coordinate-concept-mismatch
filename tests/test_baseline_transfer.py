@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -25,8 +26,17 @@ def test_assigns_explicit_transfer_pair_groups() -> None:
 
 
 def test_requires_every_staged_model_split(tmp_path: Path) -> None:
+    names = ("test", "seed_42_train", "seed_42_validation")
     config = {
-        "models": {"llama": {"hidden_size": 2}, "qwen": {"hidden_size": 2}},
+        "models": {
+            name: {
+                "id": f"fake/{name}",
+                "revision": "a" * 40,
+                "layers": 4,
+                "hidden_size": 2,
+            }
+            for name in ("llama", "qwen")
+        },
         "data_seeds": [42],
         "sampling": {"test_size": 2, "train_size": 2, "validation_size": 2},
         "activations": {"normalized_depths": [0.75]},
@@ -34,8 +44,17 @@ def test_requires_every_staged_model_split(tmp_path: Path) -> None:
     for model in config["models"]:
         directory = tmp_path / "activations" / model
         directory.mkdir(parents=True)
-        (directory / "completion.json").write_text("{}")
-        for split in ("test", "seed_42_train", "seed_42_validation"):
+        completion = {
+            "status": "complete",
+            "model_name": model,
+            "model_id": config["models"][model]["id"],
+            "model_revision": "a" * 40,
+            "block_indices": [3],
+            "normalized_depths": [0.75],
+            "splits": [{"split": split, "rows": 2} for split in names],
+        }
+        (directory / "completion.json").write_text(json.dumps(completion))
+        for split in names:
             save_activation_file(
                 directory / f"{split}.safetensors",
                 {

@@ -1,10 +1,10 @@
-name: frozen_probe_transfer_baseline
+name: frozen_probe_transfer_baseline_cross_family_extension
 runner: experiments.frozen_probe_transfer_baseline:run
 seed: 42
 data_seeds: [42, 137]
 deterministic: true
 stage: modern_baseline
-phase: core
+phase: cross_family_extension
 training: true
 
 models:
@@ -29,6 +29,20 @@ models:
     layers: 32
     hidden_size: 4096
     role: llama_lineage_control
+  mistral:
+    backend: huggingface
+    id: mistralai/Mistral-7B-v0.3
+    revision: caa1feb0e54d415e2df31207e5f4e273e33509b1
+    layers: 32
+    hidden_size: 4096
+    role: independent_family
+  granite:
+    backend: huggingface
+    id: ibm-granite/granite-3.3-8b-base
+    revision: cfb7adb44a974653cbb2ff883653971c54dba578
+    layers: 40
+    hidden_size: 4096
+    role: independent_family
 
 dataset:
   backend: huggingface
@@ -65,14 +79,13 @@ extraction:
   mode: full
   repeatability_rows: 8
   repeatability_atol: 0.0001
-  models: [llama, qwen, nemotron]
+  models: [mistral, granite]
   jobs:
-    - { name: extract_llama, model: llama, accelerator: H100, gpu_count: 1 }
-    - { name: extract_qwen, model: qwen, accelerator: H100, gpu_count: 1 }
-    - { name: extract_nemotron, model: nemotron, accelerator: H100, gpu_count: 1 }
+    - { name: extract_mistral, model: mistral, accelerator: H100, gpu_count: 1 }
+    - { name: extract_granite, model: granite, accelerator: H100, gpu_count: 1 }
 
 claims:
-  broad_three_family: pending
+  broad_cross_family: pending
 
 execution:
   accelerator: H100
@@ -107,9 +120,30 @@ probes:
 evaluation:
   primary_metrics: [auroc, auroc_transfer_gap]
   pair_groups:
-    primary: [[llama, qwen], [qwen, llama]]
-    lineage_control: [[llama, nemotron], [nemotron, llama]]
-    exploratory: [[qwen, nemotron], [nemotron, qwen]]
+    reference:
+      - [llama, qwen]
+      - [qwen, llama]
+    lineage_control:
+      - [llama, nemotron]
+      - [nemotron, llama]
+    primary:
+      - [llama, mistral]
+      - [mistral, llama]
+      - [qwen, mistral]
+      - [mistral, qwen]
+      - [llama, granite]
+      - [granite, llama]
+      - [qwen, granite]
+      - [granite, qwen]
+      - [mistral, granite]
+      - [granite, mistral]
+    exploratory:
+      - [qwen, nemotron]
+      - [nemotron, qwen]
+      - [mistral, nemotron]
+      - [nemotron, mistral]
+      - [granite, nemotron]
+      - [nemotron, granite]
   secondary_metrics:
     - auprc
     - accuracy
@@ -134,10 +168,10 @@ evaluation:
   threshold_selection: source_validation_balanced_accuracy
 
 expected_outputs:
-  metrics_rows: 108
-  prediction_rows: 183492
-  transfer_gap_rows: 72
-  probe_bundles: 6
+  metrics_rows: 300
+  prediction_rows: 509700
+  transfer_gap_rows: 240
+  probe_bundles: 10
 
 tracking:
   wandb: true
@@ -146,5 +180,6 @@ tracking:
 artifacts:
   backend: huggingface_bucket
   bucket: baimamboukar/coordinate-concept-mismatch
-  prefix: experiments/frozen_probe_transfer_baseline/modern_phase
+  reuse_prefix: experiments/frozen_probe_transfer_baseline/modern_phase
+  prefix: experiments/frozen_probe_transfer_baseline/cross_family_extension
   defer_upload: true

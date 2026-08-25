@@ -1,0 +1,135 @@
+name: modern_activation_alignment_recovery_cross_family_extension
+runner: experiments.modern_activation_alignment_recovery:run
+seed: 42
+data_seeds: [42, 137]
+deterministic: true
+stage: modern_natural_alignment
+phase: cross_family_extension
+training: false
+
+models:
+  llama:
+    backend: huggingface
+    id: meta-llama/Llama-3.1-8B-Instruct
+    revision: 0e9e39f249a16976918f6564b8830bc894c89659
+    layers: 32
+    hidden_size: 4096
+    role: independent_family
+  qwen:
+    backend: huggingface
+    id: Qwen/Qwen3-8B
+    revision: b968826d9c46dd6066d109eabc6255188de91218
+    layers: 36
+    hidden_size: 4096
+    role: independent_family
+  mistral:
+    backend: huggingface
+    id: mistralai/Mistral-7B-v0.3
+    revision: caa1feb0e54d415e2df31207e5f4e273e33509b1
+    layers: 32
+    hidden_size: 4096
+    role: independent_family
+  granite:
+    backend: huggingface
+    id: ibm-granite/granite-3.3-8b-base
+    revision: cfb7adb44a974653cbb2ff883653971c54dba578
+    layers: 40
+    hidden_size: 4096
+    role: independent_family
+
+materials:
+  baseline_artifact_prefixes:
+    - experiments/frozen_probe_transfer_baseline/modern_phase
+    - experiments/frozen_probe_transfer_baseline/cross_family_extension
+  expected_train_rows: 12000
+  expected_validation_rows: 2000
+  expected_test_rows: 1699
+
+alignment:
+  fit_split: train
+  diagnostic_split: validation
+  primary_depth: 0.75
+  depths: [0.75]
+  primary_probe_family: linear
+  primary_method: permutation_diagonal
+  methods:
+    - permutation
+    - permutation_diagonal
+    - orthogonal_procrustes
+    - affine_ridge
+    - quotient_ridge
+  ridge_relative_alpha: 0.0001
+  quotient_svd_relative_threshold: 0.001
+  negative_control: shuffled_affine_ridge
+  shuffled_pairing_seed: 314
+  device: cuda
+
+evaluation:
+  primary_pair_group: primary
+  primary_metrics:
+    - aligned_auroc_improvement
+    - recovery_fraction
+    - residual_auroc_gap
+  pair_groups:
+    primary:
+      - [llama, mistral]
+      - [mistral, llama]
+      - [qwen, mistral]
+      - [mistral, qwen]
+      - [llama, granite]
+      - [granite, llama]
+      - [qwen, granite]
+      - [granite, qwen]
+      - [mistral, granite]
+      - [granite, mistral]
+  secondary_metrics:
+    - auroc
+    - auprc
+    - accuracy
+    - balanced_accuracy
+    - precision
+    - recall
+    - f1
+    - expected_calibration_error
+    - tn
+    - fp
+    - fn
+    - tp
+    - tpr_at_fpr
+    - achieved_fpr_at_source_threshold
+    - alignment_relative_rmse
+    - alignment_mean_cosine
+    - negative_control_results
+  retain_row_level: [row_id, label, score, probability, prediction]
+  retain_thresholds: true
+  operating_fprs: [0.01, 0.05]
+  oracle_gate: 0.75
+  minimum_raw_gap: 0.10
+  minimum_improvement: 0.05
+  minimum_recovery: 0.50
+  require_all_primary_comparisons: true
+  lineage_non_degradation_margin: 0.02
+  reference_auroc_atol: 0.00001
+  bootstrap_samples: 2000
+  confidence_level: 0.95
+
+expected_outputs:
+  metrics_rows: 440
+  prediction_rows: 747560
+  recovery_rows: 320
+  alignment_diagnostic_rows: 120
+
+execution:
+  accelerator: H100
+  gpu_count: 1
+  minimum_cuda_driver_support: 13.0
+
+tracking:
+  wandb: true
+  mode: offline
+
+artifacts:
+  backend: huggingface_bucket
+  bucket: baimamboukar/coordinate-concept-mismatch
+  prefix: experiments/modern_activation_alignment_recovery/cross_family_extension
+  defer_upload: true

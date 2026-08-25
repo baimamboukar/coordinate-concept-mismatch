@@ -1,7 +1,8 @@
 import os
 from typing import Any
 
-from probe_transfer.extraction_job import JobCompletion, run_extraction_job
+from probe_transfer.extraction_job import run_extraction_job
+from probe_transfer.extraction_types import JobCompletion
 
 MODEL_ENV = "EXTRACTION_MODEL"
 

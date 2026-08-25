@@ -1,9 +1,11 @@
 import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from core.tracking import Tracker
 from probe_transfer.alignment_evaluation import evaluate_checkpoint_alignment
+from probe_transfer.atomic import publish_directories
 
 
 def run_alignment_experiment(config: dict[str, Any], tracker: Tracker) -> None:
@@ -12,33 +14,36 @@ def run_alignment_experiment(config: dict[str, Any], tracker: Tracker) -> None:
     if (output_dir / "results").exists():
         raise FileExistsError(f"Refusing to overwrite existing output: {output_dir / 'results'}")
 
-    recoveries, diagnostics, _ = evaluate_checkpoint_alignment(baseline_dir, output_dir, config)
-    _assert_expected_outputs(output_dir, config)
-    primary = _primary_recoveries(recoveries, config)
-    if not primary:
-        raise ValueError("No recovery rows matched the prespecified primary analysis.")
+    with TemporaryDirectory(prefix=".alignment-", dir=output_dir) as temporary:
+        staging = Path(temporary)
+        recoveries, diagnostics, _ = evaluate_checkpoint_alignment(baseline_dir, staging, config)
+        _assert_expected_outputs(staging, config)
+        primary = _primary_recoveries(recoveries, config)
+        if not primary:
+            raise ValueError("No recovery rows matched the prespecified primary analysis.")
 
-    for row in recoveries:
-        prefix = (
-            f"recovery/{row['source_model']}_to_{row['target_model']}/"
-            f"seed_{row['data_seed']}/layer_{round(row['depth'] * 100)}/"
-            f"{row['probe_family']}/{row['method']}"
+        for row in recoveries:
+            prefix = (
+                f"recovery/{row['source_model']}_to_{row['target_model']}/"
+                f"seed_{row['data_seed']}/layer_{round(row['depth'] * 100)}/"
+                f"{row['probe_family']}/{row['method']}"
+            )
+            values = {
+                f"{prefix}/aligned_auroc_improvement": row["aligned_auroc_improvement"],
+                f"{prefix}/residual_auroc_gap": row["residual_auroc_gap"],
+            }
+            if row["recovery_fraction"] is not None:
+                values[f"{prefix}/recovery_fraction"] = row["recovery_fraction"]
+            tracker.metrics(values)
+
+        substantial = sum(bool(row["substantial_recovery"]) for row in primary)
+        tracker.report(
+            "Summary",
+            f"Evaluated {len(recoveries)} recovery comparisons and {len(diagnostics)} held-out "
+            f"alignment diagnostics. The primary restricted recovery rule passed "
+            f"{substantial}/{len(primary)} prespecified comparisons.",
         )
-        values = {
-            f"{prefix}/aligned_auroc_improvement": row["aligned_auroc_improvement"],
-            f"{prefix}/residual_auroc_gap": row["residual_auroc_gap"],
-        }
-        if row["recovery_fraction"] is not None:
-            values[f"{prefix}/recovery_fraction"] = row["recovery_fraction"]
-        tracker.metrics(values)
-
-    substantial = sum(bool(row["substantial_recovery"]) for row in primary)
-    tracker.report(
-        "Summary",
-        f"Evaluated {len(recoveries)} recovery comparisons and {len(diagnostics)} held-out "
-        f"alignment diagnostics. The primary restricted recovery rule passed "
-        f"{substantial}/{len(primary)} prespecified comparisons.",
-    )
+        publish_directories(staging, output_dir, ("results",))
 
 
 def _primary_recoveries(

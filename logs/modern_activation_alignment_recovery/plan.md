@@ -70,6 +70,12 @@ Every condition retains row ID, label, score, probability, prediction, balanced-
 
 The prespecified primary-depth run must produce 264 metric rows, 448,536 prediction rows, 192 recovery rows, and 72 alignment-diagnostic rows.
 
+## Cross-family extension
+
+The extension reuses the same protocol for ten new directed pairs involving Mistral or Granite among Llama, Qwen, Mistral, and Granite. The original Llama–Qwen and lineage-control results remain fixed and are not recomputed. All four families expose 4,096-dimensional residual streams, so no width adapter is introduced.
+
+The comparison-level recovery rule is unchanged. An experiment-level broad restricted-coordinate result requires all twenty direction-seed comparisons at 75% depth with the linear probe to pass; otherwise recovery is reported by pair and direction. The extension must produce exactly 440 metric rows, 747,560 prediction rows, 320 recovery rows, and 120 alignment-diagnostic rows.
+
 ## Workflow
 
 1. Download the verified modern baseline prefix from Hugging Face and reproduce every raw, source-oracle, and target-oracle AUROC before fitting maps.

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from core.config import load_config
 from core.constants import PROJECT_ROOT
-from core.reproducibility import seed_everything
+from core.reproducibility import require_process_hash_seed, seed_everything
 from core.tracking import Tracker
 
 Runner = Callable[[dict[str, Any], Tracker], None]
@@ -29,6 +29,8 @@ def main() -> None:
 
     load_dotenv(PROJECT_ROOT / ".env")
     config = load_config(args.config)
+    if config.get("deterministic", True):
+        require_process_hash_seed(config["seed"])
     seed_everything(config["seed"], config.get("deterministic", True))
     runner = resolve_runner(config["runner"])
     tracker = Tracker.start(config)
