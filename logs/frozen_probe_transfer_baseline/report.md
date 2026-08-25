@@ -25,4 +25,4 @@ Across two Pythia-410M training seeds, target-trained probes reached AUROC 0.834
 
 ## Interpretation and next step
 
-The baseline goal is achieved for the independent Llama–Qwen pair, with Llama–Nemotron providing a useful lineage-sensitive control. This is not yet a broad three-family result because Mistral remains pending. It also does not distinguish coordinate mismatch from concept mismatch. The next experiment therefore applies controlled, function-preserving symmetries and measures both AUROC recovery and source-threshold stability under exact probe transport.
+The baseline goal is achieved for the independent Llama–Qwen pair, with Llama–Nemotron providing a useful lineage-sensitive control. This is not yet a broad three-family result because Mistral remains pending. It also does not distinguish coordinate mismatch from concept mismatch. The completed Pythia symmetry study already showed that a coordinate change can cause and exactly repair probe failure; the next experiment therefore fits label-free alignments between the modern models and measures how much of each natural gap is recoverable, including source-threshold stability.
