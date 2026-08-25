@@ -1,6 +1,6 @@
 # August 25th, 2026 | Frozen Probe Transfer Baseline
 
-[Pythia pilot artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/pythia_seed_probe_transfer) | [Pythia pilot on Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/hd5rdpqo) | [Modern phase on Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/dpsh1n4l) | [Experiment plan](plan.md)
+[Pythia pilot artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/pythia_seed_probe_transfer) | [Modern artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/frozen_probe_transfer_baseline/modern_phase) | [Pythia pilot on Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/hd5rdpqo) | [Modern phase on Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/dpsh1n4l) | [Experiment plan](plan.md)
 
 ## Summary
 
