@@ -112,6 +112,30 @@ def directions(models: list[str]) -> list[tuple[str, str]]:
     return [(models[0], models[1]), (models[1], models[0])]
 
 
+def direction_groups(config: dict[str, Any]) -> list[tuple[str, str, str]]:
+    groups = config.get("evaluation", {}).get("pair_groups")
+    if groups is None:
+        return [(*pair, "primary") for pair in directions(list(config["models"]))]
+
+    models = set(config["models"])
+    grouped: list[tuple[str, str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for group, pairs in groups.items():
+        for pair in pairs:
+            if len(pair) != 2:
+                raise ValueError(f"Invalid model pair in {group}: {pair}")
+            source, target = pair
+            if source not in models or target not in models or source == target:
+                raise ValueError(f"Invalid alignment direction in {group}: {pair}")
+            if (source, target) in seen:
+                raise ValueError(f"Duplicate alignment direction: {source} -> {target}")
+            seen.add((source, target))
+            grouped.append((source, target, str(group)))
+    if not grouped:
+        raise ValueError("At least one alignment direction is required.")
+    return grouped
+
+
 def resolve_device(configured: str) -> str:
     if configured == "auto":
         return "cuda" if torch.cuda.is_available() else "cpu"

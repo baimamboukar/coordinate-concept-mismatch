@@ -7,7 +7,7 @@ import numpy as np
 from probe_transfer.alignment import alignment_diagnostic, fit_ambient_alignments
 from probe_transfer.alignment_materials import (
     assert_references,
-    directions,
+    direction_groups,
     families,
     layer_key,
     load_baseline_metrics,
@@ -46,10 +46,11 @@ def evaluate_checkpoint_alignment(
     prediction_path = output_dir / "results" / "predictions.jsonl"
     prediction_path.parent.mkdir(parents=True, exist_ok=True)
     comparison_index = 0
+    materials = config["materials"]
 
     with prediction_path.open("w") as prediction_file:
         for data_seed in config["data_seeds"]:
-            for source, target in directions(list(config["models"])):
+            for source, target, pair_group in direction_groups(config):
                 for depth in alignment["depths"]:
                     layer = layer_key(depth)
                     train = paired_split(
@@ -59,6 +60,32 @@ def evaluate_checkpoint_alignment(
                         baseline_dir, source, target, f"seed_{data_seed}_validation", layer
                     )
                     test = paired_split(baseline_dir, source, target, "test", layer)
+                    _assert_row_count(train, materials["expected_train_rows"], "train")
+                    _assert_row_count(
+                        validation, materials["expected_validation_rows"], "validation"
+                    )
+                    _assert_row_count(test, materials["expected_test_rows"], "test")
+
+                    prepared_probes = []
+                    for family in families(depth, alignment["primary_depth"]):
+                        source_probe = bundles[data_seed, source][f"{layer}.{family}"]
+                        target_probe = bundles[data_seed, target][f"{layer}.{family}"]
+                        source_scores = source_probe.scores(test[0])
+                        raw_scores = source_probe.scores(test[1])
+                        oracle_scores = target_probe.scores(test[1])
+                        expected = references(baseline, data_seed, depth, family, source, target)
+                        assert_references(
+                            test[3],
+                            source_scores,
+                            raw_scores,
+                            oracle_scores,
+                            expected,
+                            config["evaluation"]["reference_auroc_atol"],
+                        )
+                        prepared_probes.append(
+                            (family, source_probe, raw_scores, oracle_scores, expected)
+                        )
+
                     maps = fit_ambient_alignments(
                         train[0],
                         train[1],
@@ -83,6 +110,7 @@ def evaluate_checkpoint_alignment(
                             depth,
                             source,
                             target,
+                            pair_group,
                         )
                     )
 
@@ -104,34 +132,27 @@ def evaluate_checkpoint_alignment(
                             "depth": depth,
                             "source_model": source,
                             "target_model": target,
+                            "pair_group": pair_group,
                             "method": "quotient_ridge",
                             **quotient_metadata,
                             **alignment_diagnostic(quotient, quotient_expected, validation[1]),
                         }
                     )
 
-                    probe_families = families(depth, alignment["primary_depth"])
-                    for family in probe_families:
-                        source_probe = bundles[data_seed, source][f"{layer}.{family}"]
-                        target_probe = bundles[data_seed, target][f"{layer}.{family}"]
-                        source_scores = source_probe.scores(test[0])
-                        raw_scores = source_probe.scores(test[1])
-                        oracle_scores = target_probe.scores(test[1])
-                        expected = references(baseline, data_seed, depth, family, source, target)
-                        assert_references(
-                            test[3],
-                            source_scores,
-                            raw_scores,
-                            oracle_scores,
-                            expected,
-                            config["evaluation"]["reference_auroc_atol"],
-                        )
+                    for (
+                        family,
+                        source_probe,
+                        raw_scores,
+                        oracle_scores,
+                        expected,
+                    ) in prepared_probes:
                         context = {
                             "data_seed": data_seed,
                             "depth": depth,
                             "probe_family": family,
                             "source_model": source,
                             "target_model": target,
+                            "pair_group": pair_group,
                         }
                         _record(
                             metrics,
@@ -202,6 +223,15 @@ def evaluate_checkpoint_alignment(
     return recoveries, diagnostics, checksums
 
 
+def _assert_row_count(
+    values: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
+    expected: int,
+    split: str,
+) -> None:
+    if any(len(item) != expected for item in values):
+        raise ValueError(f"Expected {expected} paired {split} rows.")
+
+
 def _record(
     metrics: list[dict[str, Any]],
     output: TextIO,
@@ -241,6 +271,7 @@ def _ambient_diagnostics(
     depth: float,
     source_model: str,
     target_model: str,
+    pair_group: str,
 ) -> list[dict[str, Any]]:
     return [
         {
@@ -248,6 +279,7 @@ def _ambient_diagnostics(
             "depth": depth,
             "source_model": source_model,
             "target_model": target_model,
+            "pair_group": pair_group,
             "method": name,
             **fitted.metadata,
             **alignment_diagnostic(fitted, source, target),
