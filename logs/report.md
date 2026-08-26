@@ -1,6 +1,6 @@
 # August 25th, 2026 | Progress Report and Way Forward
 
-[Proposal](../docs/proposal.md) | [Frozen-transfer report](frozen_probe_transfer_baseline/report.md) | [Alignment report](modern_activation_alignment_recovery/report.md) | [Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch)
+[Proposal](../docs/proposal.md) | [Frozen-transfer report](frozen_probe_transfer_baseline/report.md) | [Alignment report](modern_activation_alignment_recovery/report.md) | [Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch)
 
 ## What we established
 

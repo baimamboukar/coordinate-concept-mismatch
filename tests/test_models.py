@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from probe_transfer.models import (
+from probe_transfer.extraction.models import (
     load_activation_model,
     openrouter_chat,
     resolve_block_indices,

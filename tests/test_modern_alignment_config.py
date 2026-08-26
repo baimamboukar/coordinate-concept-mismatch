@@ -1,27 +1,27 @@
-from pathlib import Path
-
 from core.config import load_config
-from experiments.modern_activation_alignment_recovery import _validate_config
-from probe_transfer.alignment_materials import direction_groups
+from core.constants import CONFIGS_DIR
+from pipeline.config import materialize_stage
+from probe_transfer.alignment.materials import direction_groups
 
 
-def test_modern_alignment_protocol_is_prespecified() -> None:
-    root = Path(__file__).parents[1]
-    config = load_config(root / "configs" / "modern_activation_alignment_recovery.yaml")
+def test_modern_alignment_protocol_is_composed_from_the_study() -> None:
+    study = load_config(CONFIGS_DIR / "studies" / "modern_models.yaml")
+    config = materialize_stage(study, "align")
 
-    _validate_config(config)
-    assert direction_groups(config) == [
+    assert len(direction_groups(config)) == 16
+    assert direction_groups(config)[:2] == [
         ("llama", "qwen", "primary"),
         ("qwen", "llama", "primary"),
-        ("llama", "nemotron", "lineage_control"),
-        ("nemotron", "llama", "lineage_control"),
-        ("qwen", "nemotron", "exploratory"),
-        ("nemotron", "qwen", "exploratory"),
     ]
     assert config["alignment"]["primary_probe_family"] == "linear"
     assert config["evaluation"]["bootstrap_samples"] == 2000
-    assert config["expected_outputs"]["prediction_rows"] == 448536
-    assert config["execution"]["minimum_cuda_driver_support"] == 13.0
+    assert config["expected_outputs"] == {
+        "metrics_rows": 704,
+        "prediction_rows": 1196096,
+        "recovery_rows": 512,
+        "alignment_diagnostic_rows": 192,
+    }
+    assert config["artifact_variant"] == "combined"
 
 
 def test_two_model_alignment_retains_bidirectional_primary_default() -> None:
@@ -31,19 +31,3 @@ def test_two_model_alignment_retains_bidirectional_primary_default() -> None:
         ("first", "second", "primary"),
         ("second", "first", "primary"),
     ]
-
-
-def test_cross_family_alignment_extension_is_prespecified() -> None:
-    root = Path(__file__).parents[1]
-    path = root / "configs" / "modern_activation_alignment_recovery_cross_family_extension.yaml"
-    config = load_config(path)
-
-    _validate_config(config)
-    assert len(direction_groups(config)) == 10
-    assert all(group == "primary" for _, _, group in direction_groups(config))
-    assert config["expected_outputs"] == {
-        "metrics_rows": 440,
-        "prediction_rows": 747560,
-        "recovery_rows": 320,
-        "alignment_diagnostic_rows": 120,
-    }

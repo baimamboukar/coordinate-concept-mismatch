@@ -7,8 +7,8 @@ import torch
 from safetensors import safe_open
 from torch import nn
 
-from probe_transfer.extraction_job import run_extraction_job
-from probe_transfer.model_extraction import run_model_extraction
+from probe_transfer.extraction.job import run_extraction_job
+from probe_transfer.extraction.runner import run_model_extraction
 
 
 class FakeTokenizer:
@@ -67,7 +67,7 @@ class Tracker:
 
 def _config(rows_dir: Path, output_dir: Path) -> dict:
     return {
-        "stage": "modern_baseline",
+        "stage": "extract",
         "data_seeds": [42, 137],
         "models": {
             "llama": {
@@ -143,7 +143,7 @@ def test_extracts_one_model_into_mergeable_flat_layout(tmp_path: Path) -> None:
     assert completion.status == "complete"
     assert len(completion.splits) == 5
     assert all((model_dir / name).is_file() for name in names)
-    assert json.loads((model_dir / "completion.json").read_text())["model_name"] == "llama"
+    assert {path.name for path in model_dir.iterdir()} == names
     with safe_open(model_dir / "seed_42_train.safetensors", framework="pt") as saved:
         assert saved.get_tensor("row_ids").tolist() == [420, 421]
         assert saved.get_tensor("labels").tolist() == [0, 1]
@@ -170,7 +170,7 @@ def test_enforces_test_size_and_truncation_before_completion(tmp_path: Path) -> 
             model_loader=loader,
         )
     assert loaded is False
-    assert not (output_dir / "activations" / "llama" / "completion.json").exists()
+    assert not (output_dir / "activations" / "llama").exists()
 
 
 def test_failed_extraction_leaves_no_partial_model_directory(tmp_path: Path) -> None:
@@ -194,9 +194,7 @@ def test_failed_extraction_leaves_no_partial_model_directory(tmp_path: Path) -> 
     assert not list(activation_root.glob(".llama-*"))
 
 
-def test_runner_selects_one_enabled_environment_model(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_runner_selects_one_enabled_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = _config(tmp_path / "rows", tmp_path / "output")
     completion = SimpleNamespace(splits=(SimpleNamespace(rows=10, truncated_rows=1),))
     selected = []
@@ -205,31 +203,18 @@ def test_runner_selects_one_enabled_environment_model(
         selected.append(model_name)
         return completion
 
-    monkeypatch.setenv("EXTRACTION_MODEL", "llama")
-    monkeypatch.setattr("probe_transfer.model_extraction.run_extraction_job", fake_job)
+    monkeypatch.setattr("probe_transfer.extraction.runner.run_extraction_job", fake_job)
     tracker = Tracker()
 
-    assert run_model_extraction(config, tracker) is completion
+    assert run_model_extraction(config, tracker, "llama") is completion
     assert selected == ["llama"]
     assert tracker.logged == {"extraction/rows": 10.0, "extraction/truncation_rate": 0.1}
 
 
-def test_runner_publishes_completed_activations_from_worker(
+def test_runner_rejects_an_unconfigured_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config = _config(tmp_path / "rows", tmp_path / "output")
-    config["artifacts"] = {"worker_upload": True}
-    completion = SimpleNamespace(splits=(SimpleNamespace(rows=10, truncated_rows=0),))
-    published = []
-    monkeypatch.setenv("EXTRACTION_MODEL", "llama")
-    monkeypatch.setattr(
-        "probe_transfer.model_extraction.run_extraction_job", lambda *_args, **_kwargs: completion
-    )
-    monkeypatch.setattr(
-        "probe_transfer.model_extraction.publish_model_activations",
-        lambda _config, model: published.append(model) or "hf://buckets/test/activations/llama",
-    )
 
-    run_model_extraction(config, Tracker())
-
-    assert published == ["llama"]
+    with pytest.raises(ValueError, match="not enabled"):
+        run_model_extraction(config, Tracker(), "qwen")

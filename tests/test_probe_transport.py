@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 import torch
 
-from probe_transfer.probe_transport import StoredProbe, load_probe_bundle, save_probe_bundle
-from probe_transfer.symmetry import seeded_permutation
+from probe_transfer.probes.transport import StoredProbe, load_probe_bundle, save_probe_bundle
+from probe_transfer.symmetry.transforms import seeded_permutation
 
 
 def probes(width: int) -> dict[str, StoredProbe]:

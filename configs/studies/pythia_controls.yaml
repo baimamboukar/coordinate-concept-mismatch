@@ -1,0 +1,129 @@
+extends: ../defaults.yaml
+name: pythia_controls
+
+models:
+  pythia_seed1234:
+    backend: huggingface
+    id: EleutherAI/pythia-410m
+    revision: 9879c9b5f8bea9051dcb0e68dff21493d67e9d4f
+    artifact_key: pythia-410m-seed1234
+    layers: 24
+    hidden_size: 1024
+    role: original_training_seed
+  pythia_seed1:
+    backend: huggingface
+    id: EleutherAI/pythia-410m-seed1
+    revision: 33803c4f5a1e9a4bece59e52f17bb8755add33e1
+    artifact_key: pythia-410m-seed1
+    layers: 24
+    hidden_size: 1024
+    role: independent_training_seed
+
+activations:
+  dtype: float16
+  storage_dtype: float16
+  batch_size: 64
+
+extraction:
+  models: [pythia_seed1234, pythia_seed1]
+
+execution:
+  accelerators: [H100, H200]
+  minimum_gpu_memory_gb: 16
+
+pipeline:
+  stages:
+    preflight:
+      name: frozen_probe_transfer_baseline
+    extract:
+      name: frozen_probe_transfer_baseline
+    transfer:
+      name: frozen_probe_transfer_baseline
+      training: true
+      evaluation:
+        primary_metrics: [auroc, auroc_transfer_gap]
+        pair_groups:
+          primary:
+            - [pythia_seed1234, pythia_seed1]
+            - [pythia_seed1, pythia_seed1234]
+        oracle_gate: 0.75
+        minimum_gap: 0.10
+    align:
+      name: pythia_checkpoint_alignment_recovery
+      materials:
+        source_name: frozen_probe_transfer_baseline
+        source_study: pythia_controls
+        expected_train_rows: 12000
+        expected_validation_rows: 2000
+        expected_test_rows: 1699
+      alignment:
+        fit_split: train
+        diagnostic_split: validation
+        primary_depth: 0.75
+        depths: [0.25, 0.50, 0.75, 1.00]
+        primary_probe_family: linear
+        primary_method: permutation_diagonal
+        methods:
+          - permutation
+          - permutation_diagonal
+          - orthogonal_procrustes
+          - affine_ridge
+          - quotient_ridge
+        ridge_relative_alpha: 0.0001
+        quotient_svd_relative_threshold: 0.001
+        negative_control: shuffled_affine_ridge
+        shuffled_pairing_seed: 314
+        device: cuda
+      evaluation:
+        primary_metrics:
+          - aligned_auroc_improvement
+          - recovery_fraction
+          - residual_auroc_gap
+        additional_metrics:
+          - auroc
+          - alignment_relative_rmse
+          - alignment_mean_cosine
+          - negative_control_results
+          - layerwise_results
+        primary_pair_group: primary
+        pair_groups:
+          primary:
+            - [pythia_seed1234, pythia_seed1]
+            - [pythia_seed1, pythia_seed1234]
+        oracle_gate: 0.75
+        minimum_raw_gap: 0.10
+        minimum_improvement: 0.05
+        minimum_recovery: 0.50
+        reference_auroc_atol: 0.00001
+    symmetry:
+      name: pythia_residual_permutation_probe_transport
+      materials:
+        source_name: frozen_probe_transfer_baseline
+        source_study: pythia_controls
+        expected_test_rows: 1699
+      symmetry:
+        width: 1024
+        permutation_seeds: [42, 137]
+        probed_depths: [0.25, 0.50, 0.75, 1.00]
+        primary_depth: 0.75
+        gate_rows: 1699
+        gate_batch_size: 8
+        gate_max_length: 512
+        gate_dtype: float64
+        logit_atol: 0.00000001
+        logit_rtol: 0.00000001
+        activation_relative_tolerance: 0.0000000001
+      evaluation:
+        primary_metrics: [raw_auroc_gap, recovery_fraction]
+        additional_metrics:
+          - auroc
+          - threshold_transfer
+          - score_agreement
+          - layerwise_results
+        oracle_gate: 0.75
+        minimum_gap: 0.10
+        minimum_recovery: 0.95
+        auroc_recovery_atol: 0.01
+        score_atol: 0.0001
+        score_rtol: 0.00001
+        reference_auroc_atol: 0.00001

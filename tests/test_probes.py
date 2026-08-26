@@ -1,6 +1,6 @@
 import numpy as np
 
-from probe_transfer.probes import CPDegree2, FrozenPreprocessor, train_linear_probe
+from probe_transfer.probes.models import CPDegree2, FrozenPreprocessor, train_linear_probe
 
 
 def test_frozen_preprocessor_centers_training_activations() -> None:

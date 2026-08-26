@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from probe_transfer import runtime
+from probe_transfer.extraction import runtime
 
 
 class _Probe:

@@ -1,23 +1,20 @@
 from core.config import load_config
 from core.constants import CONFIGS_DIR
-from experiments.pythia_residual_permutation_probe_transport import _validate_config
+from pipeline.config import materialize_stage
 
 
-def test_controlled_symmetry_config_is_pinned_and_valid() -> None:
-    config = load_config(CONFIGS_DIR / "pythia_residual_permutation_probe_transport.yaml")
+def test_controlled_symmetry_protocol_is_derived() -> None:
+    study = load_config(CONFIGS_DIR / "studies" / "pythia_controls.yaml")
+    config = materialize_stage(study, "symmetry")
 
-    assert config["stage"] == "controlled_residual_permutation"
-    assert config["training"] is False
     assert config["symmetry"]["permutation_seeds"] == [42, 137]
-    assert config["materials"]["expected_test_rows"] == 1699
     assert config["symmetry"]["gate_rows"] == 1699
     assert config["symmetry"]["gate_dtype"] == "float64"
-    assert config["symmetry"]["logit_rtol"] == 1e-8
-    assert config["evaluation"]["primary_metrics"] == [
-        "raw_auroc_gap",
-        "recovery_fraction",
-    ]
-    assert config["artifacts"]["prefix"] == (
-        "experiments/pythia_residual_permutation_probe_transport"
-    )
-    _validate_config(config)
+    assert config["evaluation"]["primary_metrics"] == ["raw_auroc_gap", "recovery_fraction"]
+    assert config["expected_outputs"] == {
+        "metrics_rows": 192,
+        "prediction_rows": 326208,
+        "recovery_rows": 48,
+        "function_gate_rows": 6,
+        "probe_bundles": 8,
+    }

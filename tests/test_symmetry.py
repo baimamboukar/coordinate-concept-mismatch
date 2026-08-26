@@ -3,7 +3,7 @@ from copy import deepcopy
 import torch
 from transformers import GPTNeoXConfig, GPTNeoXForCausalLM
 
-from probe_transfer.symmetry import (
+from probe_transfer.symmetry.transforms import (
     permute_gpt_neox_residual,
     relative_permutation,
     seeded_permutation,

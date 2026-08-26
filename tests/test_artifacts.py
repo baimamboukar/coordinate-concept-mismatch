@@ -5,7 +5,7 @@ import numpy as np
 from safetensors import safe_open
 
 from probe_transfer.artifacts import save_probe_bundle, write_jsonl
-from probe_transfer.probes import train_linear_probe
+from probe_transfer.probes.models import train_linear_probe
 
 
 def test_probe_bundle_is_safe_and_self_describing(tmp_path: Path) -> None:

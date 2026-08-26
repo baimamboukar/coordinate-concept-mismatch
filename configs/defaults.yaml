@@ -1,0 +1,108 @@
+schema_version: 1
+seed: 42
+data_seeds: [42, 137]
+deterministic: true
+
+dataset:
+  backend: huggingface
+  id: allenai/wildguardmix
+  revision: d29c47f41c8b51348b5c8e8c81c039b3132b66d1
+  train: {subset: wildguardtrain, split: train}
+  test: {subset: wildguardtest, split: test}
+  prompt_field: prompt
+  label_field: prompt_harm_label
+  positive_label: harmful
+  negative_label: unharmful
+  adversarial_field: adversarial
+
+sampling:
+  train_size: 12000
+  validation_size: 2000
+  test_size: 1699
+  balance_labels: true
+  stratify_by: [adversarial]
+  protect_test: true
+
+activations:
+  prompt_format: raw
+  token_position: last_non_padding
+  max_length: 512
+  max_truncation_rate: 0.05
+  normalized_depths: [0.25, 0.50, 0.75, 1.00]
+  primary_depth: 0.75
+
+extraction:
+  mode: full
+  repeatability_rows: 8
+  repeatability_atol: 0.0001
+
+probes:
+  primary_families: [linear, cp_degree_2, mlp]
+  secondary_families: [linear]
+  linear:
+    c_values: [0.01, 0.1, 1.0, 10.0]
+    max_iter: 1000
+  cp_degree_2:
+    ranks: [2, 8, 16]
+    weight_decays: [0.0, 0.0001]
+    learning_rate: 0.001
+    batch_size: 512
+    max_epochs: 60
+    patience: 8
+    restart_seeds: [42, 137]
+  mlp:
+    hidden_size: 32
+    weight_decays: [0.0, 0.0001]
+    learning_rate: 0.001
+    batch_size: 512
+    max_epochs: 60
+    patience: 8
+    restart_seeds: [42, 137]
+
+evaluation:
+  secondary_metrics:
+    - auprc
+    - accuracy
+    - balanced_accuracy
+    - precision
+    - recall
+    - f1
+    - expected_calibration_error
+    - tn
+    - fp
+    - fn
+    - tp
+    - tpr_at_fpr
+    - achieved_fpr_at_source_threshold
+  retain_row_level: [row_id, label, score, probability, prediction]
+  retain_thresholds: true
+  operating_fprs: [0.01, 0.05]
+  threshold_selection: source_validation_balanced_accuracy
+  bootstrap_samples: 2000
+  confidence_level: 0.95
+
+execution:
+  accelerators: [H100, H200]
+  gpu_count: 1
+  minimum_cuda_driver_support: 13.0
+  minimum_gpu_memory_gb: 75
+  minimum_disk_free_gb: 50
+
+tracking:
+  wandb: true
+  mode: offline
+
+artifacts:
+  backend: huggingface_bucket
+  bucket: baimamboukar/coordinate-concept-mismatch
+  dataset_key: wildguardmix-v1
+  publish_from_worker: true
+  verify_anonymously: true
+
+pipeline:
+  stages:
+    prepare:
+      name: wildguardmix_data
+      tracking:
+        wandb: false
+        local_report: false

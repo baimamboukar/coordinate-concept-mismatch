@@ -1,6 +1,6 @@
 import numpy as np
 
-from probe_transfer.alignment import alignment_diagnostic, fit_ambient_alignments
+from probe_transfer.alignment.methods import alignment_diagnostic, fit_ambient_alignments
 
 
 def test_permutation_diagonal_recovers_known_coordinates() -> None:

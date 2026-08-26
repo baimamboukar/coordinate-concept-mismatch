@@ -1,6 +1,6 @@
 import numpy as np
 
-from probe_transfer.evaluation import (
+from probe_transfer.probes.evaluation import (
     binary_metrics,
     fixed_operating_point_metrics,
     paired_auroc_gap_interval,

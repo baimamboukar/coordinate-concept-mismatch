@@ -1,6 +1,6 @@
 # August 24th, 2026 | Pythia Checkpoint-Alignment Recovery
 
-[Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/pythia_checkpoint_alignment_recovery) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/wvm2zs5x) | [Experiment plan](plan.md)
+[Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies/pythia-checkpoint-alignment-recovery/pythia-controls) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/wvm2zs5x) | [Experiment plan](plan.md)
 
 ## Summary
 

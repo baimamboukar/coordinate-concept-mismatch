@@ -7,7 +7,7 @@ from typing import Any
 import torch
 from safetensors.torch import save_file
 
-from probe_transfer.probes import LinearProbe, NeuralProbe
+from probe_transfer.probes.models import LinearProbe, NeuralProbe
 
 Probe = LinearProbe | NeuralProbe
 

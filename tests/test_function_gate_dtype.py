@@ -3,7 +3,7 @@ from typing import Any
 import torch
 from transformers import GPTNeoXConfig, GPTNeoXForCausalLM
 
-from probe_transfer.function_gate import _collect_outputs
+from probe_transfer.symmetry.gate import _collect_outputs
 
 
 class FixedTokenizer:

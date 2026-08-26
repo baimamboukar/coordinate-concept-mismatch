@@ -1,6 +1,6 @@
 import numpy as np
 
-from probe_transfer.alignment_recovery import alignment_recovery_record
+from probe_transfer.alignment.recovery import alignment_recovery_record
 
 
 def test_alignment_recovery_reports_complete_recovery() -> None:

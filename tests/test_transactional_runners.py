@@ -3,9 +3,9 @@ from pathlib import Path
 import pytest
 
 from core.tracking import Tracker
-from probe_transfer.alignment_runner import run_alignment_experiment
+from probe_transfer.alignment.runner import run_alignment_experiment
 from probe_transfer.atomic import publish_directories
-from probe_transfer.baseline_transfer import run_staged_transfer
+from probe_transfer.transfer.runner import run_staged_transfer
 
 
 def test_baseline_validation_failure_leaves_retryable_output(
@@ -13,16 +13,16 @@ def test_baseline_validation_failure_leaves_retryable_output(
 ) -> None:
     (tmp_path / "activations").mkdir()
     monkeypatch.setenv("ACTIVATION_STAGING_DIR", str(tmp_path))
-    monkeypatch.setattr("probe_transfer.baseline_transfer._validate_activations", lambda *_: None)
+    monkeypatch.setattr("probe_transfer.transfer.runner._validate_activations", lambda *_: None)
 
     def fake_transfer(root, *_args):
         (root / "probes").mkdir()
         (root / "results").mkdir()
         return [], {}
 
-    monkeypatch.setattr("probe_transfer.baseline_transfer.run_transfer", fake_transfer)
+    monkeypatch.setattr("probe_transfer.transfer.runner.run_transfer", fake_transfer)
     monkeypatch.setattr(
-        "probe_transfer.baseline_transfer._validate_outputs",
+        "probe_transfer.transfer.runner._validate_outputs",
         lambda *_: (_ for _ in ()).throw(ValueError("late validation failed")),
     )
 
@@ -49,10 +49,10 @@ def test_alignment_validation_failure_leaves_retryable_output(
         return [], [], {}
 
     monkeypatch.setattr(
-        "probe_transfer.alignment_runner.evaluate_checkpoint_alignment", fake_evaluation
+        "probe_transfer.alignment.runner.evaluate_checkpoint_alignment", fake_evaluation
     )
     monkeypatch.setattr(
-        "probe_transfer.alignment_runner._assert_expected_outputs",
+        "probe_transfer.alignment.runner._assert_expected_outputs",
         lambda *_: (_ for _ in ()).throw(ValueError("late validation failed")),
     )
 

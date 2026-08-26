@@ -5,15 +5,13 @@ import pytest
 import torch
 from torch import nn
 
-from probe_transfer.activations import (
-    activation_output_directory,
+from probe_transfer.extraction.activations import (
     assert_repeatable,
-    bucket_uri,
     extract_activation_tensors,
     load_activation_split,
     save_activation_file,
-    upload_bucket_file,
 )
+from probe_transfer.layout import bucket_uri
 
 
 class FakeTokenizer:
@@ -107,44 +105,9 @@ def test_saved_file_and_repeatability_are_verified(tmp_path: Path) -> None:
     assert labels.tolist() == [0, 1]
 
 
-def test_deferred_upload_uses_configured_staging_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("ACTIVATION_STAGING_DIR", str(tmp_path))
-
-    with activation_output_directory(True) as staging_dir:
-        assert staging_dir == tmp_path.resolve()
-
-
 def test_bucket_uri_rejects_unsafe_paths() -> None:
-    assert bucket_uri("user/bucket", "experiments/run/file.safetensors") == (
-        "hf://buckets/user/bucket/experiments/run/file.safetensors"
+    assert bucket_uri("user/bucket", "studies/run/file.safetensors") == (
+        "hf://buckets/user/bucket/studies/run/file.safetensors"
     )
     with pytest.raises(ValueError, match="relative paths"):
         bucket_uri("user/bucket", "../file.safetensors")
-
-
-def test_upload_uses_and_verifies_the_expected_bucket_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    path = tmp_path / "llama.safetensors"
-    path.write_bytes(b"activation data")
-    commands = []
-
-    def fake_run(command, **_):
-        commands.append(command)
-        listing = "seed_42/llama.safetensors\n" if command[2] == "list" else ""
-        return SimpleNamespace(stdout=listing)
-
-    monkeypatch.setattr("probe_transfer.activations.shutil.which", lambda _: "/usr/bin/hf")
-    monkeypatch.setattr("probe_transfer.activations.subprocess.run", fake_run)
-
-    artifact = upload_bucket_file(
-        path,
-        "user/bucket",
-        "experiments/baseline/activations/smoke/seed_42/llama.safetensors",
-    )
-
-    assert artifact.uri.endswith("seed_42/llama.safetensors")
-    assert commands[0][1:3] == ["buckets", "cp"]
-    assert commands[1][1:3] == ["buckets", "list"]

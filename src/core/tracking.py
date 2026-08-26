@@ -9,7 +9,7 @@ from core.constants import PROJECT_NAME, PROJECT_ROOT
 @dataclass
 class Tracker:
     experiment: str
-    report_path: Path
+    report_path: Path | None
     wandb_run: Any = None
 
     @classmethod
@@ -22,18 +22,22 @@ class Tracker:
         if config.get("training", False) and not wandb_enabled:
             raise ValueError("Training experiments must enable W&B tracking.")
 
-        report_dir = root / "logs" / experiment
-        report_dir.mkdir(parents=True, exist_ok=True)
-        report_path = report_dir / "report.md"
+        report_path = None
+        if tracking.get("local_report", True):
+            report_dir = root / "logs" / experiment
+            report_dir.mkdir(parents=True, exist_ok=True)
+            report_path = report_dir / "report.md"
 
         wandb_run = None
         if wandb_enabled:
             import wandb
 
+            labels = [config.get("study"), stage, config.get("worker_model")]
+            run_name = "-".join(str(label) for label in labels if label)
             wandb_run = wandb.init(
                 project=os.getenv("WANDB_PROJECT", PROJECT_NAME),
                 entity=os.getenv("WANDB_ENTITY") or None,
-                name=f"{experiment}-{stage}",
+                name=run_name,
                 group=experiment,
                 config=config,
                 mode=tracking.get("mode"),
@@ -44,7 +48,7 @@ class Tracker:
             report_path=report_path,
             wandb_run=wandb_run,
         )
-        if not report_path.exists():
+        if report_path is not None and not report_path.exists():
             report_path.write_text(f"# {experiment}\n\n")
         return tracker
 
@@ -53,6 +57,8 @@ class Tracker:
             self.wandb_run.log(metrics, step=step)
 
     def report(self, heading: str, body: str) -> None:
+        if self.report_path is None:
+            return
         with self.report_path.open("a") as handle:
             handle.write(f"## {heading}\n\n{body.strip()}\n\n")
 

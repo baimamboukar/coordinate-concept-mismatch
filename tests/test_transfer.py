@@ -3,8 +3,8 @@ from pathlib import Path
 import torch
 
 from core.tracking import Tracker
-from probe_transfer.activations import save_activation_file
-from probe_transfer.transfer import _bootstrap_seed, run_transfer
+from probe_transfer.extraction.activations import save_activation_file
+from probe_transfer.transfer.evaluation import _bootstrap_seed, run_transfer
 
 
 def _write_split(path: Path, values: list[float], labels: list[int]) -> None:

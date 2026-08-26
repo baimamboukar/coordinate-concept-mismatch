@@ -20,7 +20,7 @@ def test_tracker_passes_declared_offline_mode(
     Tracker.start(
         {
             "name": "frozen_probe_transfer_baseline",
-            "stage": "modern_baseline",
+            "stage": "transfer",
             "seed": 42,
             "training": True,
             "tracking": {"wandb": True, "mode": "offline"},

@@ -1,6 +1,6 @@
 # August 24th, 2026 | Pythia Residual-Permutation Probe Transport
 
-[Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/pythia_residual_permutation_probe_transport) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/nlvrx25u) | [Experiment plan](plan.md)
+[Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies/pythia-residual-permutation-probe-transport/pythia-controls) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/nlvrx25u) | [Experiment plan](plan.md)
 
 ## Summary
 

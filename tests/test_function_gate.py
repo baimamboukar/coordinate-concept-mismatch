@@ -1,6 +1,6 @@
 import torch
 
-from probe_transfer.function_gate import GateOutputs, _gate_record
+from probe_transfer.symmetry.gate import GateOutputs, _gate_record
 
 
 def test_function_gate_uses_combined_logit_tolerance() -> None:

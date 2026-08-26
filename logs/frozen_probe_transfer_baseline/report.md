@@ -1,6 +1,6 @@
 # August 25th, 2026 | Frozen Probe Transfer Baseline
 
-[Plan](plan.md) | [Cross-family artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/frozen_probe_transfer_baseline/cross_family_extension) | [Cross-family W&B run](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/fpydnkqn) | [Earlier modern artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/frozen_probe_transfer_baseline/modern_phase) | [Pythia pilot artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/pythia_seed_probe_transfer)
+[Plan](plan.md) | [Modern artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies/frozen-probe-transfer-baseline/modern-models) | [Cross-family W&B run](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/fpydnkqn) | [Pythia control artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies/frozen-probe-transfer-baseline/pythia-controls)
 
 ## Summary
 

@@ -1,47 +1,39 @@
 import argparse
-from collections.abc import Callable
-from importlib import import_module
 from pathlib import Path
-from typing import Any, cast
 
 from dotenv import load_dotenv
 
 from core.config import load_config
-from core.constants import PROJECT_ROOT
-from core.reproducibility import require_process_hash_seed, seed_everything
-from core.tracking import Tracker
-
-Runner = Callable[[dict[str, Any], Tracker], None]
-
-
-def resolve_runner(spec: str) -> Runner:
-    module_name, function_name = spec.split(":", maxsplit=1)
-    runner = getattr(import_module(module_name), function_name, None)
-    if not callable(runner):
-        raise TypeError(f"Runner is not callable: {spec}")
-    return cast(Runner, runner)
+from core.constants import PIPELINE_STAGES, PROJECT_ROOT
+from pipeline.config import materialize_stage
+from pipeline.runner import run_stage
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run a named probe-transfer experiment.")
-    parser.add_argument("config", type=Path, help="Path to a semantic .yaml configuration.")
+    parser = argparse.ArgumentParser(description="Run one stage of a configured research study.")
+    parser.add_argument("config", type=Path, help="Path to a study YAML configuration.")
+    parser.add_argument("stage", choices=PIPELINE_STAGES, help="Pipeline stage to run.")
+    parser.add_argument("--model", help="Model key for preflight or extraction workers.")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Compose and validate the selected stage without executing it.",
+    )
+    modes.add_argument(
+        "--publish-only",
+        action="store_true",
+        help="Retry worker-to-Hugging-Face publication without recomputing the stage.",
+    )
     args = parser.parse_args()
 
     load_dotenv(PROJECT_ROOT / ".env")
-    config = load_config(args.config)
-    if config.get("deterministic", True):
-        require_process_hash_seed(config["seed"])
-    seed_everything(config["seed"], config.get("deterministic", True))
-    runner = resolve_runner(config["runner"])
-    tracker = Tracker.start(config)
-
-    try:
-        runner(config, tracker)
-    except Exception as error:
-        tracker.report("Failure", f"`{type(error).__name__}`: {error}")
-        tracker.finish("failed")
-        raise
-    tracker.finish()
+    study = load_config(args.config)
+    if args.validate_only:
+        materialize_stage(study, args.stage)
+        print(f"Validated {study['name']}:{args.stage}")
+        return
+    run_stage(study, args.stage, model=args.model, publish_only=args.publish_only)
 
 
 if __name__ == "__main__":

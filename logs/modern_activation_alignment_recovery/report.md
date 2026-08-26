@@ -1,6 +1,6 @@
 # August 25th, 2026 | Modern Activation-Alignment Recovery
 
-[Plan](plan.md) | [Cross-family artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/modern_activation_alignment_recovery/cross_family_extension) | [Cross-family W&B run](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/kf9jhj5a) | [Earlier Llama–Qwen artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/experiments/modern_activation_alignment_recovery) | [Earlier W&B run](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/bz38ys3e)
+[Plan](plan.md) | [Cross-family artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies/modern-activation-alignment-recovery/modern-models/cross-family) | [Cross-family W&B run](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/kf9jhj5a) | [Reference and lineage artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies/modern-activation-alignment-recovery/modern-models/reference-and-lineage) | [Earlier W&B run](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/bz38ys3e)
 
 ## Summary
 

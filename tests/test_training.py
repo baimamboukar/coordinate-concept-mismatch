@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from probe_transfer.training import families_for_depth, fit_probe_family
+from probe_transfer.probes.training import families_for_depth, fit_probe_family
 
 
 def test_depth_policy_keeps_nonlinear_probes_at_primary_depth() -> None:

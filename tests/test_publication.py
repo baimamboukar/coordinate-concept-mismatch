@@ -1,65 +1,79 @@
-import shutil
+import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from probe_transfer import publication
+from probe_transfer.publication import Publication, publish_artifacts
 
 
-def _config(root: Path) -> dict:
-    return {
-        "models": {"mistral": {}},
-        "extraction": {"models": ["mistral"], "staging_dir": str(root)},
-        "artifacts": {
-            "bucket": "test/project",
-            "prefix": "experiments/baseline",
-            "worker_upload": True,
-            "verify_anonymously": True,
-        },
-    }
+class Tracker:
+    def __init__(self) -> None:
+        self.reports = []
+
+    def report(self, heading, body) -> None:
+        self.reports.append((heading, body))
 
 
-def _activation_source(root: Path) -> Path:
-    source = root / "activations" / "mistral"
-    source.mkdir(parents=True)
-    for index, name in enumerate(sorted(publication.ACTIVATION_FILES)):
-        (source / name).write_bytes(f"content-{index}".encode())
-    return source
-
-
-def test_worker_upload_is_anonymously_downloaded_and_compared(
+def test_worker_upload_is_anonymously_verified_without_downloading(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    source = _activation_source(tmp_path)
+    source = tmp_path / "results"
+    source.mkdir()
+    (source / "metrics.jsonl").write_text("{}\n")
     calls = []
     monkeypatch.setenv("HF_TOKEN", "secret")
-    monkeypatch.setattr(publication.shutil, "which", lambda _name: "/usr/bin/hf")
+    monkeypatch.setattr("probe_transfer.publication.shutil.which", lambda _name: "/usr/bin/hf")
 
     def fake_run(command, **kwargs):
         calls.append((command, kwargs))
-        if command[3].startswith("hf://"):
-            destination = Path(command[4])
-            for path in source.iterdir():
-                shutil.copy2(path, destination / path.name)
-        return subprocess.CompletedProcess(command, 0)
+        output = ""
+        if "--dry-run" in command:
+            output = json.dumps(
+                {
+                    "type": "header",
+                    "summary": {
+                        "uploads": 0,
+                        "downloads": 0,
+                        "deletes": 0,
+                        "skips": 1,
+                    },
+                }
+            )
+            output += "\n" + json.dumps(
+                {"type": "operation", "action": "skip", "path": "metrics.jsonl"}
+            )
+        return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
 
-    monkeypatch.setattr(publication.subprocess, "run", fake_run)
+    monkeypatch.setattr("probe_transfer.publication.subprocess.run", fake_run)
+    tracker = Tracker()
+    config = {"artifacts": {"bucket": "test/project"}}
 
-    uri = publication.publish_model_activations(_config(tmp_path), "mistral")
+    uris = publish_artifacts(
+        config,
+        [Publication(source, "studies/probe-transfer/modern-models/results")],
+        tracker,
+    )
 
-    assert uri == "hf://buckets/test/project/experiments/baseline/activations/mistral"
+    assert uris == ["hf://buckets/test/project/studies/probe-transfer/modern-models/results"]
     assert calls[0][0][3] == str(source)
-    assert calls[1][0][3] == uri
+    assert "--dry-run" in calls[1][0]
     assert "HF_TOKEN" not in calls[1][1]["env"]
     assert calls[1][1]["env"]["HF_HUB_DISABLE_IMPLICIT_TOKEN"] == "1"
+    assert len(tracker.reports) == 1
 
 
 def test_worker_upload_requires_ephemeral_token(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _activation_source(tmp_path)
+    source = tmp_path / "results"
+    source.mkdir()
+    (source / "metrics.jsonl").write_text("{}\n")
     monkeypatch.delenv("HF_TOKEN", raising=False)
 
     with pytest.raises(RuntimeError, match="HF_TOKEN"):
-        publication.publish_model_activations(_config(tmp_path), "mistral")
+        publish_artifacts(
+            {"artifacts": {"bucket": "test/project"}},
+            [Publication(source, "studies/probe-transfer/results")],
+            Tracker(),
+        )

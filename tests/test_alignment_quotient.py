@@ -1,12 +1,12 @@
 import numpy as np
 import torch
 
-from probe_transfer.alignment_quotient import (
+from probe_transfer.alignment.quotient import (
     build_quotient_basis,
     fit_quotient_alignment,
     quotient_scores,
 )
-from probe_transfer.probe_transport import StoredProbe
+from probe_transfer.probes.transport import StoredProbe
 
 
 def _linear_probe(name: str, weight: list[float]) -> StoredProbe:
