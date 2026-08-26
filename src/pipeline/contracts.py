@@ -1,5 +1,7 @@
 from typing import Any
 
+from probe_transfer.symmetry.protocol import estimated_alignment_enabled, selected_models
+
 
 def expected_outputs(stage: str, config: dict[str, Any]) -> dict[str, int] | None:
     builders = {
@@ -73,7 +75,7 @@ def _alignment(config: dict[str, Any]) -> dict[str, int]:
 def _symmetry(config: dict[str, Any]) -> dict[str, int]:
     symmetry = config["symmetry"]
     seeds = len(config["data_seeds"])
-    models = len(config["models"])
+    models = len(selected_models(config))
     family_depths = _families(
         config,
         symmetry["probed_depths"],
@@ -81,11 +83,20 @@ def _symmetry(config: dict[str, Any]) -> dict[str, int]:
     )
     permutations = len(symmetry["permutation_seeds"])
     comparisons = seeds * models * family_depths
-    conditions = 2 + 3 * permutations
-    return {
+    estimated = estimated_alignment_enabled(config)
+    conditions = 2 + (3 + int(estimated)) * permutations
+    outputs = {
         "metrics_rows": comparisons * conditions,
         "prediction_rows": comparisons * conditions * config["materials"]["expected_test_rows"],
         "recovery_rows": comparisons * permutations,
         "function_gate_rows": models * (1 + permutations),
         "probe_bundles": seeds * models * permutations,
     }
+    smoke_rows = symmetry.get("smoke_gate_rows", 0)
+    if smoke_rows:
+        outputs["function_smoke_gate_rows"] = models * (1 + permutations)
+    if estimated:
+        outputs["alignment_diagnostic_rows"] = (
+            seeds * models * len(symmetry["probed_depths"]) * permutations
+        )
+    return outputs

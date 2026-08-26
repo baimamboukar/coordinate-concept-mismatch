@@ -23,21 +23,31 @@ def materialize_activations(
         )
 
 
-def materialize_baseline(config: dict[str, Any], destination: Path) -> None:
+def materialize_baseline(
+    config: dict[str, Any], destination: Path, models: list[str] | None = None
+) -> None:
     materials = config["materials"]
     source = study_prefix(materials["source_name"], materials["source_study"])
-    _sync_public(config, f"{source}/probes", destination / "probes")
+    includes = None
+    if models is not None:
+        includes = [
+            f"seed_{seed}/{model}.safetensors" for seed in config["data_seeds"] for model in models
+        ]
+    _sync_public(config, f"{source}/probes", destination / "probes", include=includes)
     _sync_public(
         config,
         f"{source}/results",
         destination / "results",
         include="metrics.jsonl",
     )
-    materialize_activations(config, destination)
+    materialize_activations(config, destination, models=models)
 
 
 def _sync_public(
-    config: dict[str, Any], remote_prefix: str, destination: Path, include: str | None = None
+    config: dict[str, Any],
+    remote_prefix: str,
+    destination: Path,
+    include: str | list[str] | None = None,
 ) -> None:
     hf = shutil.which("hf")
     if hf is None:
@@ -52,8 +62,8 @@ def _sync_public(
         "--no-delete",
         "--quiet",
     ]
-    if include:
-        command.extend(["--include", include])
+    for pattern in [include] if isinstance(include, str) else include or []:
+        command.extend(["--include", pattern])
     environment = os.environ.copy()
     for name in HF_TOKEN_ENVIRONMENTS:
         environment.pop(name, None)

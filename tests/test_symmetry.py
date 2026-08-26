@@ -1,10 +1,11 @@
 from copy import deepcopy
 
 import torch
-from transformers import GPTNeoXConfig, GPTNeoXForCausalLM
+from transformers import GPTNeoXConfig, GPTNeoXForCausalLM, MistralConfig, MistralForCausalLM
 
 from probe_transfer.symmetry.transforms import (
     permute_gpt_neox_residual,
+    permute_mistral_residual,
     relative_permutation,
     seeded_permutation,
 )
@@ -21,6 +22,20 @@ def tiny_neox() -> GPTNeoXForCausalLM:
         attention_dropout=0.0,
     )
     return GPTNeoXForCausalLM(config).eval()
+
+
+def tiny_mistral() -> MistralForCausalLM:
+    config = MistralConfig(
+        hidden_size=16,
+        intermediate_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=4,
+        vocab_size=37,
+        attention_dropout=0.0,
+    )
+    return MistralForCausalLM(config).eval()
 
 
 def test_residual_permutation_preserves_logits_and_permutes_hidden_states() -> None:
@@ -68,3 +83,27 @@ def test_relative_permutation_reaches_second_absolute_basis() -> None:
         rtol=1e-5,
         atol=1e-6,
     )
+
+
+def test_mistral_residual_permutation_preserves_function() -> None:
+    torch.manual_seed(17)
+    reference = tiny_mistral().double()
+    transformed = deepcopy(reference)
+    permutation = seeded_permutation(16, 42)
+    input_ids = torch.randint(0, 37, (3, 9))
+
+    permute_mistral_residual(transformed, permutation)
+    with torch.inference_mode():
+        expected = reference(input_ids, output_hidden_states=True)
+        actual = transformed(input_ids, output_hidden_states=True)
+
+    torch.testing.assert_close(actual.logits, expected.logits, rtol=1e-6, atol=1e-7)
+    for expected_hidden, actual_hidden in zip(
+        expected.hidden_states, actual.hidden_states, strict=True
+    ):
+        torch.testing.assert_close(
+            actual_hidden,
+            expected_hidden.index_select(-1, permutation),
+            rtol=1e-6,
+            atol=1e-7,
+        )

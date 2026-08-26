@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score
 
+from probe_transfer.alignment.methods import AlignmentMap
 from probe_transfer.artifacts import sha256_file, write_jsonl
 from probe_transfer.extraction.activations import load_activation_split
 from probe_transfer.probes.evaluation import (
@@ -18,6 +19,7 @@ from probe_transfer.probes.transport import (
     load_probe_bundle,
     save_probe_bundle,
 )
+from probe_transfer.symmetry.protocol import estimated_alignment_enabled, selected_models
 from probe_transfer.symmetry.recovery import recovery_record
 from probe_transfer.symmetry.transforms import inverse_permutation
 
@@ -27,6 +29,7 @@ def evaluate_permutations(
     output_dir: Path,
     config: dict[str, Any],
     permutations: dict[int, torch.Tensor],
+    estimated_maps: dict[tuple[int, str, float, int], AlignmentMap] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     baseline_metrics = _reference_metrics(baseline_dir / "results" / "metrics.jsonl")
     metrics: list[dict[str, Any]] = []
@@ -38,7 +41,7 @@ def evaluate_permutations(
     comparison_index = 0
     with prediction_path.open("w") as prediction_file:
         for data_seed in config["data_seeds"]:
-            for model_name in config["models"]:
+            for model_name in selected_models(config):
                 probes = load_probe_bundle(
                     baseline_dir / "probes" / f"seed_{data_seed}" / f"{model_name}.safetensors"
                 )
@@ -106,11 +109,21 @@ def evaluate_permutations(
                         inverse_scores = probe.transport(inverse_permutation(permutation)).scores(
                             permuted_values
                         )
-                        for condition, scores in (
+                        conditions = [
                             ("raw_permuted", raw_scores),
                             ("exact_transport", transported_scores),
                             ("inverse_transport", inverse_scores),
-                        ):
+                        ]
+                        estimated_scores = None
+                        if estimated_alignment_enabled(config):
+                            if estimated_maps is None:
+                                raise ValueError("Estimated symmetry alignment maps are required.")
+                            key = (data_seed, model_name, depth, permutation_seed)
+                            estimated_scores = probe.scores(
+                                estimated_maps[key].transform(permuted_values)
+                            )
+                            conditions.insert(2, ("estimated_alignment", estimated_scores))
+                        for condition, scores in conditions:
                             _record_condition(
                                 metrics,
                                 prediction_file,
@@ -133,6 +146,7 @@ def evaluate_permutations(
                                 raw_scores,
                                 transported_scores,
                                 inverse_scores,
+                                estimated_scores,
                                 config,
                                 comparison_index,
                             )

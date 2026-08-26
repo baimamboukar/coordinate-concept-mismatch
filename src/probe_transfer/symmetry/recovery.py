@@ -14,6 +14,7 @@ def recovery_record(
     raw: np.ndarray,
     transported: np.ndarray,
     inverse: np.ndarray,
+    estimated: np.ndarray | None,
     config: dict[str, Any],
     comparison_index: int,
 ) -> dict[str, Any]:
@@ -52,7 +53,7 @@ def recovery_record(
         and recovery is not None
         and recovery >= evaluation["minimum_recovery"]
     )
-    return {
+    record = {
         **context,
         "permutation_seed": permutation_seed,
         "reference_auroc": reference_auroc,
@@ -68,3 +69,29 @@ def recovery_record(
         "coordinate_failure": coordinate_failure,
         "exact_recovery": exact_recovery,
     }
+    if estimated is not None:
+        estimated_auroc = float(roc_auc_score(labels, estimated))
+        estimated_fraction = (estimated_auroc - raw_auroc) / gap if gap > 0 else None
+        estimated_score_match = bool(
+            np.allclose(
+                estimated,
+                reference,
+                atol=evaluation["score_atol"],
+                rtol=evaluation["score_rtol"],
+            )
+        )
+        record.update(
+            {
+                "estimated_auroc": estimated_auroc,
+                "estimated_recovery_fraction": estimated_fraction,
+                "estimated_maximum_score_error": float(np.max(np.abs(estimated - reference))),
+                "estimated_score_match": estimated_score_match,
+                "estimated_recovery": bool(
+                    gap > 0
+                    and estimated_fraction is not None
+                    and estimated_fraction >= evaluation["minimum_recovery"]
+                    and abs(estimated_auroc - reference_auroc) <= evaluation["auroc_recovery_atol"]
+                ),
+            }
+        )
+    return record

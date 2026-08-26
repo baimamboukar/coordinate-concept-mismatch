@@ -16,6 +16,7 @@ from probe_transfer.materialization import (
 )
 from probe_transfer.preparation import prepare_dataset
 from probe_transfer.publication import Publication
+from probe_transfer.symmetry.protocol import selected_models
 from probe_transfer.symmetry.runner import run_symmetry_experiment
 from probe_transfer.transfer.runner import run_staged_transfer
 
@@ -55,7 +56,11 @@ def _align(config: dict[str, Any], tracker: Tracker, model: str | None) -> None:
 def _symmetry(config: dict[str, Any], tracker: Tracker, model: str | None) -> None:
     _reject_model(model)
     _ensure_prepared(config, tracker)
-    materialize_baseline(config, _environment_path(BASELINE_ARTIFACT_ENV))
+    materialize_baseline(
+        config,
+        _environment_path(BASELINE_ARTIFACT_ENV),
+        models=selected_models(config),
+    )
     run_symmetry_experiment(config, tracker)
 
 

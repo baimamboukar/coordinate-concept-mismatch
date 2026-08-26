@@ -102,6 +102,8 @@ pipeline:
         source_study: pythia_controls
         expected_test_rows: 1699
       symmetry:
+        transformation: residual_permutation
+        models: [pythia_seed1234, pythia_seed1]
         width: 1024
         permutation_seeds: [42, 137]
         probed_depths: [0.25, 0.50, 0.75, 1.00]

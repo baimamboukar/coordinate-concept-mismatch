@@ -40,7 +40,10 @@ def fit_ambient_alignments(
     device: str,
 ) -> dict[str, AlignmentMap]:
     source_values, target_values = _paired_tensors(source, target, device)
-    indices, correlations = _feature_matches(source_values, target_values)
+    permutation = _fit_permutation(source_values, target_values)
+    indices = permutation.indices
+    if indices is None:
+        raise RuntimeError("Fitted permutation is missing feature indices.")
     matched = target_values.index_select(1, indices)
     source_mean = source_values.mean(dim=0)
     target_mean = matched.mean(dim=0)
@@ -49,17 +52,12 @@ def fit_ambient_alignments(
     variance = centered_target.square().mean(dim=0).clamp_min(1e-8)
     scale = (covariance / variance).clamp_min(1e-8)
 
-    permutation = AlignmentMap(
-        "permutation",
-        indices=indices,
-        metadata=_correlation_metadata(correlations),
-    )
     diagonal = AlignmentMap(
         "permutation_diagonal",
         indices=indices,
         scale=scale,
         offset=source_mean - target_mean * scale,
-        metadata=_correlation_metadata(correlations),
+        metadata=dict(permutation.metadata),
     )
     procrustes = _fit_procrustes(source_values, target_values)
     ridge = fit_affine_ridge(
@@ -78,6 +76,16 @@ def fit_ambient_alignments(
         method="shuffled_affine_ridge",
     )
     return {item.method: item for item in (permutation, diagonal, procrustes, ridge, shuffled)}
+
+
+def fit_permutation_alignment(
+    source: np.ndarray,
+    target: np.ndarray,
+    *,
+    device: str,
+) -> AlignmentMap:
+    source_values, target_values = _paired_tensors(source, target, device)
+    return _fit_permutation(source_values, target_values)
 
 
 def fit_affine_ridge(
@@ -149,6 +157,15 @@ def _feature_matches(
     indices = torch.as_tensor(target_indices[order], device=target.device)
     matched = correlations[indices, torch.arange(source.shape[1], device=source.device)]
     return indices, matched
+
+
+def _fit_permutation(source: torch.Tensor, target: torch.Tensor) -> AlignmentMap:
+    indices, correlations = _feature_matches(source, target)
+    return AlignmentMap(
+        "permutation",
+        indices=indices,
+        metadata=_correlation_metadata(correlations),
+    )
 
 
 def _standardize(values: torch.Tensor) -> torch.Tensor:

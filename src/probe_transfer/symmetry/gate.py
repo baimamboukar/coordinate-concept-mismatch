@@ -9,7 +9,9 @@ from probe_transfer.extraction.models import (
     resolve_block_indices,
     select_last_non_padding,
 )
-from probe_transfer.symmetry.transforms import permute_gpt_neox_residual, relative_permutation
+from probe_transfer.extraction.runtime import validate_loaded_model
+from probe_transfer.symmetry.protocol import selected_models
+from probe_transfer.symmetry.transforms import permute_residual, relative_permutation
 
 
 @dataclass(frozen=True)
@@ -25,11 +27,17 @@ def run_function_gates(
 ) -> list[dict[str, Any]]:
     symmetry = config["symmetry"]
     records = []
-    for model_name, model_config in config["models"].items():
+    for model_name in selected_models(config):
+        model_config = config["models"][model_name]
         tokenizer, model = load_activation_model(
             model_config["id"],
             model_config["revision"],
             dtype=symmetry["gate_dtype"],
+        )
+        validate_loaded_model(
+            model,
+            layers=model_config["layers"],
+            hidden_size=model_config["hidden_size"],
         )
         reference = _collect_outputs(tokenizer, model, rows, model_config, symmetry)
         width = model_config["hidden_size"]
@@ -39,7 +47,7 @@ def run_function_gates(
             *[("permutation", seed, permutation) for seed, permutation in permutations.items()],
         ]
         for condition, seed, target in targets:
-            permute_gpt_neox_residual(model, relative_permutation(current, target))
+            permute_residual(model, relative_permutation(current, target))
             actual = _collect_outputs(tokenizer, model, rows, model_config, symmetry)
             records.append(
                 _gate_record(

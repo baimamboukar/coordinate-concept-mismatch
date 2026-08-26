@@ -3,6 +3,7 @@ from typing import Any
 from core.config import ConfigError, validate_evaluation
 from core.constants import HF_BUCKET
 from probe_transfer.alignment.materials import direction_groups
+from probe_transfer.symmetry.protocol import estimated_alignment_enabled, selected_models
 
 
 def validate_stage(config: dict[str, Any]) -> None:
@@ -98,6 +99,11 @@ def _validate_alignment(config: dict[str, Any]) -> None:
 def _validate_symmetry(config: dict[str, Any]) -> None:
     validate_evaluation(config.get("evaluation"))
     symmetry = config.get("symmetry", {})
+    if symmetry.get("transformation") != "residual_permutation":
+        raise ConfigError("The symmetry stage requires an explicit residual permutation.")
+    models = selected_models(config)
+    if not models or len(models) != len(set(models)) or set(models) - set(config["models"]):
+        raise ConfigError("Symmetry models must be unique configured model keys.")
     if symmetry.get("primary_depth") not in symmetry.get("probed_depths", []):
         raise ConfigError("The primary symmetry depth must be evaluated.")
     if symmetry.get("gate_rows") != config["materials"].get("expected_test_rows"):
@@ -110,9 +116,28 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
         raise ConfigError("Permutation seeds must be unique.")
     if symmetry.get("logit_atol", 0) <= 0 or symmetry.get("logit_rtol", 0) <= 0:
         raise ConfigError("Function-preservation tolerances must be positive.")
-    widths = {model["hidden_size"] for model in config["models"].values()}
+    widths = {config["models"][name]["hidden_size"] for name in models}
     if widths != {symmetry.get("width")}:
         raise ConfigError("Every transformed model must match the configured residual width.")
+    smoke_rows = symmetry.get("smoke_gate_rows", 0)
+    if smoke_rows < 0 or smoke_rows >= symmetry["gate_rows"]:
+        raise ConfigError("Symmetry smoke rows must be non-negative and smaller than gate rows.")
+    if estimated_alignment_enabled(config):
+        settings = symmetry["estimated_alignment"]
+        materials = config.get("materials", {})
+        if settings.get("method") != "permutation":
+            raise ConfigError("Known-symmetry estimation currently requires strict permutation.")
+        if settings.get("fit_split") != "train" or settings.get("diagnostic_split") != "validation":
+            raise ConfigError(
+                "Estimated symmetry alignment requires train fit and validation diagnosis."
+            )
+        fit_rows = settings.get("fit_rows", 0)
+        if fit_rows < 2 or fit_rows > materials.get("expected_train_rows", 0):
+            raise ConfigError("Estimated alignment fit rows exceed the training material contract.")
+        if materials.get("expected_validation_rows") != config["sampling"]["validation_size"]:
+            raise ConfigError("Estimated alignment validation rows must match the protected split.")
+        if settings.get("device") not in {"cpu", "cuda", "auto"}:
+            raise ConfigError("Estimated alignment device must be cpu, cuda, or auto.")
 
 
 def _validate_activation_protocol(config: dict[str, Any]) -> None:
