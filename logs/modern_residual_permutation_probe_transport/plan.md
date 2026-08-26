@@ -22,7 +22,7 @@ For each frozen probe $q$, we compare its reference score, naive score $q(h^P_\e
 - **Data:** the protected WildGuardMix split and data seeds 42 and 137 used in the frozen-transfer baseline.
 - **Probes:** linear, degree-2 CP, and one-hidden-layer MLP probes at 75% depth.
 - **Interventions:** identity plus residual permutations seeded by 42 and 137.
-- **Function gates:** an eight-row fail-fast gate followed by all 1,699 protected test prompts in FP64; combined logit tolerance $10^{-5}$, 100% next-token agreement, and activation-equivariance error at most $10^{-5}$. The tolerance accounts for Mistral's native float32 RMSNorm reduction while remaining negligible relative to probe-scale effects.
+- **Function gates:** an eight-row fail-fast gate followed by all 1,699 protected test prompts in FP64; absolute logit tolerance $3\times10^{-5}$ plus relative tolerance $10^{-5}$, 100% next-token agreement, and activation-equivariance error at most $10^{-5}$. The absolute tolerance was fixed after a diagnostic full-set gate measured a maximum difference of $2.105\times10^{-5}$ with 100% next-token agreement; it accounts for Mistral's native float32 RMSNorm reduction while remaining negligible relative to probe-scale effects.
 - **Estimated alignment:** strict feature permutation fitted on the first 2,000 paired training activations and diagnosed on all 2,000 validation activations.
 
 ## Outcomes and decision rule

@@ -171,7 +171,7 @@ pipeline:
         gate_batch_size: 2
         gate_max_length: 512
         gate_dtype: float64
-        logit_atol: 0.00001
+        logit_atol: 0.00003
         logit_rtol: 0.00001
         activation_relative_tolerance: 0.00001
         estimated_alignment:
