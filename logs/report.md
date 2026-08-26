@@ -1,27 +1,21 @@
-# August 25th, 2026 | Progress Report and Way Forward
+# August 27, 2026 | Progress Report and Way Forward
 
-[Proposal](../docs/proposal.md) | [Frozen-transfer report](frozen_probe_transfer_baseline/report.md) | [Alignment report](modern_activation_alignment_recovery/report.md) | [Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch)
+[Proposal](../docs/proposal.md) | [Frozen transfer](frozen_probe_transfer_baseline/report.md) | [Natural alignment](modern_activation_alignment_recovery/report.md) | [Exact symmetry](modern_residual_permutation_probe_transport/report.md) | [Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch)
 
-## What we established
+## Progression of evidence
 
-This project asks whether cross-model probe failure reflects a change of internal coordinates or a deeper difference in learned representations. We have built a gradual experimental chain that moves from a causal symmetry control to independently trained modern model families.
+This project asks whether cross-model probe failure reflects incompatible internal coordinates or deeper representational differences.
 
-First, the controlled Pythia residual-permutation experiment showed that coordinate mismatch alone can cause severe probe failure. The transformed models preserved their function across all 1,699 test prompts, while naive probe transfer lost 0.239–0.425 AUROC in all 24 comparisons. Analytic probe transport restored every result exactly. This is a causal pipeline control, not yet modern-model paper evidence.
+The first causal control used exact residual permutations in Pythia. The transformations preserved model behavior, naïve transfer failed in every qualifying comparison, and analytic probe transport restored the original result. This established that coordinate mismatch is sufficient to cause probe failure, but only in a small-model setting.
 
-Second, alignment between independently trained Pythia checkpoints recovered a median 60.3% of the natural transfer gap with the restricted permutation-diagonal map; 11/12 comparisons passed. Flexible linear maps recovered approximately 97%, whereas the shuffled-pair control passed 0/12.
+The natural Pythia checkpoint comparison then tested whether restricted, label-free alignment could repair transfer between independently trained models. Permutation-diagonal alignment recovered a median 60.3% of the gap, while flexible linear maps recovered approximately 97% and a shuffled-pair control recovered none. Thus, natural mismatch was only partly consistent with the restricted symmetry.
 
-Third, the modern frozen-transfer baseline established broad failure across Llama, Qwen, Mistral, and Granite. All 20 prespecified primary direction-seed comparisons failed, with a median AUROC gap of 0.411. Transfer TPR at 1% FPR was only 0–4.4%, compared with 31.2–48.1% for target-trained probes. In contrast, the Llama–Nemotron lineage control failed in 0/24 comparisons, showing that transfer failure is not inevitable between distinct checkpoints.
+The modern frozen-transfer baseline extended the question to Llama, Qwen, Mistral, Granite, and Nemotron. All 20 prespecified cross-family direction–seed comparisons failed, with a median AUROC gap of 0.411 and transfer TPR at 1% FPR of only 0–4.4%. By contrast, the Llama–Nemotron lineage control failed in 0/24 comparisons, demonstrating that transfer failure is not inevitable between distinct checkpoints.
 
-Finally, label-free permutation-diagonal alignment recovered a median 61.8% of the modern cross-family gap and passed 16/20 comparisons. Flexible affine and quotient maps recovered 97.3%, while the shuffled control passed 0/20. Granite $\rightarrow$ Qwen remained the clearest directional failure.
+Label-free alignment recovered a median 61.8% of the modern cross-family gap with a restricted permutation-diagonal map and 97.3% with flexible affine and quotient maps. The shuffled control passed 0/20 comparisons, while Granite $\rightarrow$ Qwen remained a clear directional failure. Flexible recovery establishes linear recoverability, not exact parameter symmetry.
 
-The modern exact-symmetry control then applied two global residual permutations to Mistral-7B-v0.3. All transformations preserved next-token predictions on 1,699 prompts. Naive transfer lost a mean 0.442 AUROC across 12/12 comparisons, while analytic transport and label-free permutation estimation each recovered 100% of the gap.
+Finally, we applied exact residual-coordinate permutations to Mistral-7B-v0.3, Llama-3.1-8B-Instruct, and Qwen3-8B. All nine full function gates passed with 100% next-token agreement. Naïve AUROC fell by 0.432–0.442 across models, producing coordinate-induced failure in all 36 probe comparisons. Analytic transport and label-free strict permutation estimation recovered all 36, and the planted mapping was identified exactly in all 12 model–seed combinations.
 
-## Current conclusion
+## Current conclusion and next step
 
-The evidence supports a mixed account. Coordinate mismatch is sufficient to cause failure and explains a substantial portion of natural transfer gaps. However, restricted alignment does not repair every pair. Near-complete flexible recovery establishes linear recoverability, not an exact parameter symmetry, and the remaining gap is unexplained rather than proof of concept mismatch.
-
-## Way forward
-
-The immediate priority is to extend the modern causal control to MLP-neuron permutations, attention-component permutations, valid positive rescalings, and normalization-compatible transformations. Each intervention must pass the same function and activation-equivariance gates before probe evaluation.
-
-Next, we should diagnose Granite $\rightarrow$ Qwen across layers, alignment-set sizes, and restricted map classes while preserving label-free fitting and the protected test set. Only after adding a second probe task or dataset and an unequal-width family should we make broader claims about concept mismatch or architectural generality.
+Coordinate mismatch is sufficient to cause large probe-transfer failures and explains a substantial portion of natural cross-family gaps. It does not explain every restricted-alignment failure. The next experiment should build a controlled symmetry taxonomy—MLP-neuron permutations, attention-component permutations, valid positive rescalings, and normalization-compatible transformations—then compare their recovery signatures with natural failures, especially Granite $\rightarrow$ Qwen. A second probe task and an unequal-width model pair should follow before making a broad concept-mismatch claim.

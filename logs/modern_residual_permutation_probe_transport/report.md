@@ -1,15 +1,25 @@
-# August 26th, 2026 | Modern Residual-Permutation Probe Transport
+# August 26–27, 2026 | Modern Residual-Permutation Probe Transport
 
-[Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies/modern-residual-permutation-probe-transport/modern-models) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/mh826137)
+[Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies/modern-residual-permutation-probe-transport/modern-models) | W&B: [Mistral](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/mh826137) · [Llama](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/ml642818) · [Qwen](https://wandb.ai/JinesisLab/coordinate-concept-mismatch/runs/mq905369)
 
-## Result
+## Objective and method
 
-We applied two seeded global residual-coordinate permutations to the pinned Mistral-7B-v0.3 checkpoint and evaluated frozen probes at 75% depth. Both transformations passed the full function-preservation gate on all 1,699 protected test prompts: next-token agreement was 100%, the maximum logit difference was $2.105\times10^{-5}$, and the maximum activation-equivariance error was $1.379\times10^{-7}$.
+We tested whether a known change of residual coordinates can independently cause frozen-probe transfer failure in three modern transformer families. For Mistral-7B-v0.3, Llama-3.1-8B-Instruct, and Qwen3-8B, we applied two seeded global residual-coordinate permutations while consistently transforming every affected parameter. We evaluated linear, degree-2 CP, and one-hidden-layer MLP probes at 75% depth using data seeds 42 and 137.
 
-Across data seeds 42 and 137, permutation seeds 42 and 137, and linear, degree-2 CP, and one-hidden-layer MLP probes, all 12 comparisons met the prespecified coordinate-failure rule. Mean AUROC fell from 0.912 for reference probes to 0.469 under naive transfer, a mean gap of 0.442; individual gaps ranged from 0.359 to 0.530, and every paired 95% bootstrap interval excluded zero.
+Each intervention first had to preserve the model's function and satisfy activation equivariance on all 1,699 protected test prompts. We then compared naïve transfer with analytic probe transport and a strict feature permutation estimated only from paired, unlabeled activations.
 
-Analytic probe transport restored the reference AUROC in all 12 comparisons, yielding 100% recovery with maximum score error $9.54\times10^{-6}$. A strict permutation alignment fitted on 2,000 paired, unlabeled training activations recovered the planted mapping exactly in all four seed combinations. It achieved zero validation relative RMSE, cosine similarity 1.0, and exact score recovery in all 12 comparisons. The complete secondary-metric contract and 101,940 row-level predictions are retained in the public artifacts.
+## Results
 
-## Interpretation and next step
+| Model | Function gates | Reference AUROC | Naïve AUROC | Mean gap | Analytic recovery | Estimated recovery |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Mistral-7B-v0.3 | 3/3 | 0.912 | 0.469 | 0.442 | 12/12 | 12/12 |
+| Llama-3.1-8B-Instruct | 3/3 | 0.930 | 0.498 | 0.432 | 12/12 | 12/12 |
+| Qwen3-8B | 3/3 | 0.928 | 0.489 | 0.440 | 12/12 | 12/12 |
 
-This experiment extends the causal Pythia control to a modern RMSNorm/SwiGLU transformer: coordinate mismatch alone is sufficient to destroy linear and nonlinear probe transfer, and label-free activation matching can recover a known symmetry exactly. It does not establish that natural cross-family gaps are exact parameter symmetries. The next experiment should test additional exact symmetry classes—MLP-neuron permutations, attention-component permutations, and valid positive rescalings—before comparing their signatures with the residual failures observed between independently trained model families.
+All transformed models retained 100% next-token agreement. Maximum activation-equivariance error was below $1.74\times10^{-7}$ across models. All 36 probe comparisons met the prespecified coordinate-failure rule, and both analytic transport and estimated alignment recovered the reference performance in all 36. The estimated alignment also identified the exact planted mapping in all 12 model–seed combinations.
+
+The public artifacts retain the complete secondary-metric contract—AUPRC, accuracy, balanced accuracy, precision, recall, F1, calibration, confusion counts, thresholds, and low-FPR TPR—together with 305,820 row-level predictions.
+
+## Conclusion
+
+Across Mistral, Llama, and Qwen, residual-coordinate mismatch alone is sufficient to produce severe linear and nonlinear probe-transfer failure without changing model behavior. A label-free restricted alignment can recover this failure when the true mismatch belongs to its assumed symmetry class. This causal result does not imply that natural cross-model gaps are exact permutations; it provides the positive control required to test that hypothesis.
