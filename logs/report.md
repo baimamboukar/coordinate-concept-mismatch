@@ -14,12 +14,14 @@ Third, the modern frozen-transfer baseline established broad failure across Llam
 
 Finally, label-free permutation-diagonal alignment recovered a median 61.8% of the modern cross-family gap and passed 16/20 comparisons. Flexible affine and quotient maps recovered 97.3%, while the shuffled control passed 0/20. Granite $\rightarrow$ Qwen remained the clearest directional failure.
 
+The modern exact-symmetry control then applied two global residual permutations to Mistral-7B-v0.3. All transformations preserved next-token predictions on 1,699 prompts. Naive transfer lost a mean 0.442 AUROC across 12/12 comparisons, while analytic transport and label-free permutation estimation each recovered 100% of the gap.
+
 ## Current conclusion
 
 The evidence supports a mixed account. Coordinate mismatch is sufficient to cause failure and explains a substantial portion of natural transfer gaps. However, restricted alignment does not repair every pair. Near-complete flexible recovery establishes linear recoverability, not an exact parameter symmetry, and the remaining gap is unexplained rather than proof of concept mismatch.
 
 ## Way forward
 
-The immediate priority is to reproduce the exact function-preserving symmetry study on a modern transformer, beginning with Mistral-7B-v0.3. We should test valid MLP-neuron permutations, attention-component permutations, positive rescalings, and normalization-compatible transformations. Each intervention must pass strict logit, next-token, and activation-equivariance gates before comparing naive transfer, analytic probe transport, and activation-estimated alignment.
+The immediate priority is to extend the modern causal control to MLP-neuron permutations, attention-component permutations, valid positive rescalings, and normalization-compatible transformations. Each intervention must pass the same function and activation-equivariance gates before probe evaluation.
 
 Next, we should diagnose Granite $\rightarrow$ Qwen across layers, alignment-set sizes, and restricted map classes while preserving label-free fitting and the protected test set. Only after adding a second probe task or dataset and an unequal-width family should we make broader claims about concept mismatch or architectural generality.
