@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from probe_transfer.probes.transport import StoredProbe, load_probe_bundle, save_probe_bundle
+from probe_transfer.symmetry.evaluation import _select_probes
 from probe_transfer.symmetry.transforms import seeded_permutation
 
 
@@ -78,3 +79,19 @@ def test_transported_bundle_round_trip(tmp_path: Path) -> None:
     assert set(loaded) == set(transported)
     assert loaded["layer_75.linear"].details["permutation_seed"] == 137
     assert len(digest) == 64
+
+
+def test_symmetry_evaluation_selects_only_configured_depths() -> None:
+    available = {
+        **probes(8),
+        "layer_100.linear": StoredProbe("layer_100.linear", "linear", {}, {}),
+    }
+    config = {
+        "symmetry": {"probed_depths": [0.75], "primary_depth": 0.75},
+        "probes": {
+            "primary_families": ["linear", "cp_degree_2", "mlp"],
+            "secondary_families": ["linear"],
+        },
+    }
+
+    assert set(_select_probes(available, config)) == set(probes(8))

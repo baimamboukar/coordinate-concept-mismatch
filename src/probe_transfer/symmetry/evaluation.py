@@ -14,6 +14,7 @@ from probe_transfer.probes.evaluation import (
     fixed_operating_point_metrics,
     prediction_rows,
 )
+from probe_transfer.probes.training import families_for_depth
 from probe_transfer.probes.transport import (
     StoredProbe,
     load_probe_bundle,
@@ -42,8 +43,11 @@ def evaluate_permutations(
     with prediction_path.open("w") as prediction_file:
         for data_seed in config["data_seeds"]:
             for model_name in selected_models(config):
-                probes = load_probe_bundle(
-                    baseline_dir / "probes" / f"seed_{data_seed}" / f"{model_name}.safetensors"
+                probes = _select_probes(
+                    load_probe_bundle(
+                        baseline_dir / "probes" / f"seed_{data_seed}" / f"{model_name}.safetensors"
+                    ),
+                    config,
                 )
                 _save_transported_probes(
                     output_dir,
@@ -265,3 +269,18 @@ def _assert_score_match(reference: np.ndarray, actual: np.ndarray, config: dict[
 def _parse_probe_name(name: str) -> tuple[float, str]:
     layer, family = name.split(".", maxsplit=1)
     return int(layer.removeprefix("layer_")) / 100, family
+
+
+def _select_probes(
+    probes: dict[str, StoredProbe], config: dict[str, Any]
+) -> dict[str, StoredProbe]:
+    symmetry = config["symmetry"]
+    expected = {
+        f"layer_{round(depth * 100)}.{family}"
+        for depth in symmetry["probed_depths"]
+        for family in families_for_depth(config["probes"], depth, symmetry["primary_depth"])
+    }
+    missing = expected.difference(probes)
+    if missing:
+        raise ValueError(f"Probe bundle is missing configured probes: {sorted(missing)}")
+    return {name: probes[name] for name in sorted(expected)}
