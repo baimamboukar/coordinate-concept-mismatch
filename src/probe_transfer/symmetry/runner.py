@@ -49,11 +49,11 @@ def run_symmetry_experiment(config: dict[str, Any], tracker: Tracker) -> None:
         if smoke_rows:
             smoke = run_function_gates(config, rows[:smoke_rows], permutations)
             write_jsonl(staging / "results" / "function_gate_smoke.jsonl", smoke)
-            _require_gate_pass(smoke, "fail-fast")
+            _require_gate_pass(smoke, "fail-fast", output)
 
         gates = run_function_gates(config, rows, permutations)
         write_jsonl(staging / "results" / "function_gates.jsonl", gates)
-        _require_gate_pass(gates, "full-test")
+        _require_gate_pass(gates, "full-test", output)
 
         maps, diagnostics = estimate_permutation_maps(baseline, config, permutations)
         if estimated_alignment_enabled(config):
@@ -81,10 +81,17 @@ def run_symmetry_experiment(config: dict[str, Any], tracker: Tracker) -> None:
         publish_directories(staging, output, ("probes", "results"))
 
 
-def _require_gate_pass(gates: list[dict[str, Any]], phase: str) -> None:
+def _require_gate_pass(gates: list[dict[str, Any]], phase: str, output: Path) -> None:
     failed = [gate for gate in gates if not gate["passed"]]
     if failed:
-        raise RuntimeError(f"{len(failed)} {phase} function-preservation gates failed.")
+        write_jsonl(output / "diagnostics" / f"{phase}_function_gates.jsonl", gates)
+        details = "; ".join(
+            f"seed={gate['permutation_seed']} logits={gate['maximum_logit_error']:.3e} "
+            f"activations={gate['maximum_activation_relative_error']:.3e} "
+            f"agreement={gate['next_token_agreement']:.6f}"
+            for gate in failed
+        )
+        raise RuntimeError(f"{len(failed)} {phase} function-preservation gates failed: {details}")
 
 
 def _validate_outputs(output: Path, config: dict[str, Any]) -> None:
