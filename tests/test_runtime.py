@@ -61,8 +61,17 @@ def test_runtime_checks_driver_support_not_toolkit_version(
     assert result["cuda_driver_support"] == 13.0
 
 
-def test_driver_support_is_read_from_nvidia_smi(monkeypatch: pytest.MonkeyPatch) -> None:
-    result = SimpleNamespace(stdout="NVIDIA-SMI 580.00    CUDA Version: 13.0")
+@pytest.mark.parametrize(
+    "header",
+    [
+        "NVIDIA-SMI 580.00    CUDA Version: 13.0",
+        "NVIDIA-SMI 610.57.04    CUDA UMD Version: 13.3",
+    ],
+)
+def test_driver_support_is_read_from_nvidia_smi(
+    monkeypatch: pytest.MonkeyPatch, header: str
+) -> None:
+    result = SimpleNamespace(stdout=header)
     monkeypatch.setattr(runtime.subprocess, "run", lambda *_args, **_kwargs: result)
 
-    assert runtime._cuda_driver_support_version() == 13.0
+    assert runtime._cuda_driver_support_version() == float(header.rsplit(" ", 1)[-1])

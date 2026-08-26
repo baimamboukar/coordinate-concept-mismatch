@@ -46,7 +46,7 @@ def _cuda_driver_support_version() -> float:
         )
     except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         raise RuntimeError("Unable to verify CUDA driver support with nvidia-smi.") from error
-    match = re.search(r"CUDA Version:\s*([0-9]+\.[0-9]+)", result.stdout)
+    match = re.search(r"CUDA(?: UMD)? Version:\s*([0-9]+\.[0-9]+)", result.stdout)
     if match is None:
         raise RuntimeError("nvidia-smi did not report CUDA driver support.")
     return float(match.group(1))
