@@ -9,7 +9,7 @@ from probe_transfer.alignment.runner import run_alignment_experiment
 from probe_transfer.extraction.job import ROWS_ENV, STAGING_ENV
 from probe_transfer.extraction.preflight import run_extraction_preflight
 from probe_transfer.extraction.runner import run_model_extraction
-from probe_transfer.layout import activation_prefix, stage_prefix
+from probe_transfer.layout import activation_prefix, model_artifact_key, stage_prefix
 from probe_transfer.materialization import (
     materialize_activations,
     materialize_baseline,
@@ -54,7 +54,6 @@ def _align(config: dict[str, Any], tracker: Tracker, model: str | None) -> None:
 
 
 def _symmetry(config: dict[str, Any], tracker: Tracker, model: str | None) -> None:
-    _reject_model(model)
     _ensure_prepared(config, tracker)
     materialize_baseline(
         config,
@@ -79,6 +78,12 @@ def validate_invocation(config: dict[str, Any], stage: str, model: str | None) -
         selected = _require_model(model)
         if selected not in config["extraction"]["models"]:
             raise ValueError(f"Model {selected} is not enabled for extraction.")
+    elif stage == "symmetry":
+        configured = selected_models(config)
+        if model is None and len(configured) > 1:
+            raise ValueError("Multi-model symmetry stages require --model.")
+        if model is not None and model not in configured:
+            raise ValueError(f"Model {model} is not enabled for symmetry.")
     else:
         _reject_model(model)
 
@@ -101,6 +106,8 @@ def publication_requests(
         ]
     root = _environment_path(EXPERIMENT_OUTPUT_ENV)
     prefix = stage_prefix(config)
+    if stage == "symmetry" and model is not None:
+        prefix = f"{prefix}/{model_artifact_key(config, model)}"
     requests = [Publication(root / "results", f"{prefix}/results")]
     if stage == "symmetry":
         requests.insert(0, Publication(root / "probes", f"{prefix}/probes"))
@@ -109,13 +116,13 @@ def publication_requests(
 
 def _require_model(model: str | None) -> str:
     if not model:
-        raise ValueError("preflight and extract require --model.")
+        raise ValueError("This stage requires --model.")
     return model
 
 
 def _reject_model(model: str | None) -> None:
     if model is not None:
-        raise ValueError("--model is valid only for preflight and extract.")
+        raise ValueError("--model is not valid for this stage.")
 
 
 def _configured_path(config: dict[str, Any], environment: str, key: str) -> Path:

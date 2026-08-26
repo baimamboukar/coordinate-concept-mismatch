@@ -58,13 +58,22 @@ def permute_gpt_neox_residual(model: Any, permutation: torch.Tensor) -> None:
 
 def permute_mistral_residual(model: Any, permutation: torch.Tensor) -> None:
     """Change Mistral residual coordinates while preserving its logits."""
+    _permute_llama_family_residual(model, permutation, expected_type="mistral")
+
+
+def _permute_llama_family_residual(
+    model: Any, permutation: torch.Tensor, *, expected_type: str | None = None
+) -> None:
     validate_permutation(permutation)
     backbone = getattr(model, "model", None)
     lm_head = getattr(model, "lm_head", None)
     if backbone is None or lm_head is None or not hasattr(backbone, "layers"):
-        raise TypeError("Expected a Mistral causal language model.")
-    if getattr(model.config, "model_type", None) != "mistral":
-        raise TypeError("Residual permutation currently supports Mistral models explicitly.")
+        raise TypeError("Expected a Llama-family causal language model.")
+    model_type = getattr(model.config, "model_type", None)
+    if model_type not in {"llama", "mistral", "qwen3"}:
+        raise TypeError(f"Unsupported Llama-family architecture: {model_type}")
+    if expected_type is not None and model_type != expected_type:
+        raise TypeError(f"Expected model type {expected_type}, found {model_type}.")
 
     embedding = backbone.embed_tokens.weight
     width = embedding.shape[1]
@@ -96,8 +105,8 @@ def permute_residual(model: Any, permutation: torch.Tensor) -> None:
     model_type = getattr(getattr(model, "config", None), "model_type", None)
     if model_type == "gpt_neox":
         permute_gpt_neox_residual(model, permutation)
-    elif model_type == "mistral":
-        permute_mistral_residual(model, permutation)
+    elif model_type in {"llama", "mistral", "qwen3"}:
+        _permute_llama_family_residual(model, permutation)
     else:
         raise TypeError(f"Unsupported residual-permutation architecture: {model_type}")
 

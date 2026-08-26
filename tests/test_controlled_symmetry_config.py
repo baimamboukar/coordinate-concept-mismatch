@@ -26,15 +26,15 @@ def test_modern_symmetry_protocol_is_model_scoped_and_derived() -> None:
     study = load_config(CONFIGS_DIR / "studies" / "modern_models.yaml")
     config = materialize_stage(study, "symmetry")
 
-    assert config["symmetry"]["models"] == ["mistral"]
+    assert config["symmetry"]["models"] == ["mistral", "llama", "qwen"]
     assert config["execution"]["accelerators"] == ["H200"]
     assert config["symmetry"]["estimated_alignment"]["fit_rows"] == 2000
     assert config["expected_outputs"] == {
-        "metrics_rows": 60,
-        "prediction_rows": 101940,
-        "recovery_rows": 12,
-        "function_gate_rows": 3,
-        "probe_bundles": 4,
-        "function_smoke_gate_rows": 3,
-        "alignment_diagnostic_rows": 4,
+        "metrics_rows": 180,
+        "prediction_rows": 305820,
+        "recovery_rows": 36,
+        "function_gate_rows": 9,
+        "probe_bundles": 12,
+        "function_smoke_gate_rows": 9,
+        "alignment_diagnostic_rows": 12,
     }

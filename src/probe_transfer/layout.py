@@ -6,9 +6,15 @@ SEMANTIC_KEY = re.compile(r"^[a-z0-9]+(?:-[a-z0-9.]+)*$")
 
 
 def activation_prefix(config: dict[str, Any], model_name: str) -> str:
+    return (
+        f"activations/{_key(config['artifacts']['dataset_key'])}/"
+        f"{model_artifact_key(config, model_name)}"
+    )
+
+
+def model_artifact_key(config: dict[str, Any], model_name: str) -> str:
     model = config["models"][model_name]
-    model_key = model.get("artifact_key", model_name.replace("_", "-"))
-    return f"activations/{_key(config['artifacts']['dataset_key'])}/{_key(model_key)}"
+    return _key(model.get("artifact_key", model_name.replace("_", "-")))
 
 
 def stage_prefix(config: dict[str, Any]) -> str:

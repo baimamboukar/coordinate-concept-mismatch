@@ -13,7 +13,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run one stage of a configured research study.")
     parser.add_argument("config", type=Path, help="Path to a study YAML configuration.")
     parser.add_argument("stage", choices=PIPELINE_STAGES, help="Pipeline stage to run.")
-    parser.add_argument("--model", help="Model key for preflight or extraction workers.")
+    parser.add_argument("--model", help="Model key for preflight, extraction, or symmetry workers.")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument(
         "--validate-only",

@@ -5,6 +5,7 @@ from core.constants import PROJECT_ROOT
 from core.reproducibility import require_process_hash_seed, seed_everything
 from core.tracking import Tracker
 from pipeline.config import materialize_stage
+from pipeline.contracts import expected_outputs
 from pipeline.stages import HANDLERS, publication_requests, validate_invocation
 from probe_transfer.publication import publish_artifacts
 
@@ -21,6 +22,9 @@ def run_stage(
     validate_invocation(config, stage, model)
     if model is not None:
         config["worker_model"] = model
+        derived = expected_outputs(stage, config)
+        if derived is not None:
+            config["expected_outputs"] = derived
     requests = publication_requests(config, stage, model)
     if publish_only:
         if not requests:

@@ -4,7 +4,7 @@
 
 ## Objective
 
-The Pythia control established that an exact residual-coordinate permutation can destroy frozen-probe performance without changing the language model's function. The natural modern-model experiments subsequently showed that label-free activation alignment usually recovers a substantial, but incomplete, fraction of cross-family transfer failure. This experiment connects those results by testing both analytic probe transport and activation-estimated alignment under a known symmetry of a modern transformer.
+The Pythia control established that an exact residual-coordinate permutation can destroy frozen-probe performance without changing the language model's function. The natural modern-model experiments subsequently showed that label-free activation alignment usually recovers a substantial, but incomplete, fraction of cross-family transfer failure. This experiment connects those results by testing both analytic probe transport and activation-estimated alignment under a known symmetry of modern transformers. Mistral establishes the initial result; the prespecified Llama and Qwen extension tests whether it generalizes across architectures.
 
 ## Formal setup
 
@@ -18,7 +18,7 @@ For each frozen probe $q$, we compare its reference score, naive score $q(h^P_\e
 
 ## Protocol
 
-- **Model:** `mistralai/Mistral-7B-v0.3` at the pinned repository revision.
+- **Models:** `mistralai/Mistral-7B-v0.3`, `meta-llama/Llama-3.1-8B-Instruct`, and `Qwen/Qwen3-8B` at pinned repository revisions. Llama and Qwen run on isolated, model-scoped workers after the completed Mistral run.
 - **Data:** the protected WildGuardMix split and data seeds 42 and 137 used in the frozen-transfer baseline.
 - **Probes:** linear, degree-2 CP, and one-hidden-layer MLP probes at 75% depth.
 - **Interventions:** identity plus residual permutations seeded by 42 and 137.
@@ -29,4 +29,6 @@ For each frozen probe $q$, we compare its reference score, naive score $q(h^P_\e
 
 Primary outcomes are the raw AUROC gap, analytic recovery fraction, and estimated-alignment recovery fraction. A comparison demonstrates coordinate-induced failure when reference AUROC is at least 0.75, the raw gap is at least 0.10, and its paired 95% bootstrap interval excludes zero. Analytic transport must recover at least 95% of the gap and reproduce reference scores within the prespecified tolerance. Estimated recovery is reported independently and succeeds at 95% recovery. Secondary outcomes retain AUROC, AUPRC, accuracy, balanced accuracy, precision, recall, F1, calibration, confusion counts, thresholds, TPR at 1% and 5% FPR, alignment diagnostics, and row-level predictions.
 
-Failure of any function gate stops probe evaluation. Passing the experiment would extend the causal coordinate-mismatch result to a modern RMSNorm/SwiGLU model and validate whether our label-free alignment procedure can recover a known modern-model symmetry.
+Failure of any function gate stops probe evaluation. The completed Mistral run establishes the modern-model control; Llama and Qwen determine whether the same causal result and label-free recovery hold across architectures.
+
+For the cross-architecture extension, the same decision rule is applied separately to each model. Each model must pass all three full function gates, demonstrate coordinate-induced failure in every qualifying probe comparison, and recover at least 95% of the gap under analytic transport. Estimated alignment is evaluated independently. Results are published under model-specific artifact prefixes so concurrent workers cannot overwrite one another.

@@ -161,7 +161,7 @@ pipeline:
         minimum_gpu_memory_gb: 120
       symmetry:
         transformation: residual_permutation
-        models: [mistral]
+        models: [mistral, llama, qwen]
         width: 4096
         permutation_seeds: [42, 137]
         probed_depths: [0.75]
