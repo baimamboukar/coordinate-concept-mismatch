@@ -1,6 +1,6 @@
 # August 27, 2026 | Progress Report and Way Forward
 
-[Proposal](../docs/proposal.md) | [Frozen transfer](frozen_probe_transfer_baseline/report.md) | [Natural alignment](modern_activation_alignment_recovery/report.md) | [Residual symmetry](modern_residual_permutation_probe_transport/report.md) | [MLP symmetry](modern_mlp_neuron_permutation_probe_transport/report.md) | [Attention symmetry](modern_attention_head_permutation_probe_transport/report.md) | [Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch)
+[Proposal](../docs/proposal.md) | [Frozen transfer](frozen_probe_transfer_baseline/report.md) | [Natural alignment](modern_activation_alignment_recovery/report.md) | [Residual symmetry](modern_residual_permutation_probe_transport/report.md) | [MLP permutation](modern_mlp_neuron_permutation_probe_transport/report.md) | [Attention symmetry](modern_attention_head_permutation_probe_transport/report.md) | [MLP rescaling](modern_mlp_positive_diagonal_probe_transport/report.md) | [Hugging Face artifacts](https://huggingface.co/buckets/baimamboukar/coordinate-concept-mismatch/tree/studies) | [Weights & Biases](https://wandb.ai/JinesisLab/coordinate-concept-mismatch)
 
 ## Progression of evidence
 
@@ -18,6 +18,8 @@ Exact modern residual permutations across Mistral, Llama, and Qwen preserved beh
 
 The GQA attention-head control extended this result to the pre-output-projection representation. All full gates passed with 100% next-token agreement. Mean AUROC fell from 0.889 to 0.660 under naive transfer; all 12 comparisons failed, while analytic and label-free transport recovered all 12 and exactly recovered every planted map.
 
+The positive-diagonal MLP control then held the model, site, data, and probes fixed while changing the symmetry type. Mean AUROC fell only from 0.908 to 0.878; none of 12 comparisons met the prespecified 0.10 failure threshold, although analytic and label-free transport recovered all 12. This contrast shows that exact symmetries are not uniformly disruptive: transformation geometry and magnitude affect probe fragility.
+
 ## Current conclusion and next step
 
-Coordinate mismatch is sufficient to cause large probe-transfer failures at residual, MLP, and attention representations and explains a substantial portion of natural cross-family gaps. It does not explain every restricted-alignment failure. Next, test positive-rescaling and normalization-compatible symmetries, then add a second probe task and an unequal-width model pair before making a broad concept-mismatch claim.
+Coordinate mismatch is sufficient to cause large failures, but an exact coordinate change need not do so. Next, preregister a positive-scale magnitude sweep, then test normalization-compatible transformations and a second probe task before making a broad concept-mismatch claim.
