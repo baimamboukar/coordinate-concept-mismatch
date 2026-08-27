@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Any, TextIO
 
 import numpy as np
-import torch
 from sklearn.metrics import roc_auc_score
 
 from probe_transfer.alignment.methods import AlignmentMap
@@ -20,16 +19,16 @@ from probe_transfer.probes.transport import (
     load_probe_bundle,
     save_probe_bundle,
 )
+from probe_transfer.symmetry.coordinates import CoordinateTransform
 from probe_transfer.symmetry.protocol import estimated_alignment_enabled, selected_models
 from probe_transfer.symmetry.recovery import recovery_record
-from probe_transfer.symmetry.transforms import inverse_permutation
 
 
-def evaluate_permutations(
+def evaluate_transformations(
     baseline_dir: Path,
     output_dir: Path,
     config: dict[str, Any],
-    permutations: dict[int, torch.Tensor],
+    transformations: dict[int, CoordinateTransform],
     estimated_maps: dict[tuple[int, str, float, int], AlignmentMap] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     baseline_metrics = _reference_metrics(baseline_dir / "results" / "metrics.jsonl")
@@ -54,7 +53,7 @@ def evaluate_permutations(
                     probes,
                     model_name,
                     data_seed,
-                    permutations,
+                    transformations,
                     checksums,
                 )
                 for probe_name, probe in sorted(probes.items()):
@@ -89,8 +88,9 @@ def evaluate_permutations(
                         config,
                     )
 
-                    identity = torch.arange(values.shape[1])
-                    identity_scores = probe.transport(identity).scores(values[:, identity])
+                    kind = next(iter(transformations.values())).kind
+                    identity = CoordinateTransform.identity(kind, values.shape[1])
+                    identity_scores = probe.transport(identity).scores(identity.apply_array(values))
                     _assert_score_match(reference_scores, identity_scores, config)
                     _record_condition(
                         metrics,
@@ -106,15 +106,17 @@ def evaluate_permutations(
                         config,
                     )
 
-                    for permutation_seed, permutation in permutations.items():
-                        permuted_values = values[:, permutation]
-                        raw_scores = probe.scores(permuted_values)
-                        transported_scores = probe.transport(permutation).scores(permuted_values)
-                        inverse_scores = probe.transport(inverse_permutation(permutation)).scores(
-                            permuted_values
+                    for transformation_seed, transformation in transformations.items():
+                        transformed_values = transformation.apply_array(values)
+                        raw_scores = probe.scores(transformed_values)
+                        transported_scores = probe.transport(transformation).scores(
+                            transformed_values
+                        )
+                        inverse_scores = probe.transport(transformation.inverse()).scores(
+                            transformed_values
                         )
                         conditions = [
-                            ("raw_permuted", raw_scores),
+                            (transformation.raw_condition, raw_scores),
                             ("exact_transport", transported_scores),
                             ("inverse_transport", inverse_scores),
                         ]
@@ -122,9 +124,9 @@ def evaluate_permutations(
                         if estimated_alignment_enabled(config):
                             if estimated_maps is None:
                                 raise ValueError("Estimated symmetry alignment maps are required.")
-                            key = (data_seed, model_name, depth, permutation_seed)
+                            key = (data_seed, model_name, depth, transformation_seed)
                             estimated_scores = probe.scores(
-                                estimated_maps[key].transform(permuted_values)
+                                estimated_maps[key].transform(transformed_values)
                             )
                             conditions.insert(2, ("estimated_alignment", estimated_scores))
                         for condition, scores in conditions:
@@ -133,7 +135,7 @@ def evaluate_permutations(
                                 prediction_file,
                                 context,
                                 condition,
-                                permutation_seed,
+                                transformation_seed,
                                 row_ids.numpy(),
                                 label_values,
                                 scores,
@@ -144,7 +146,7 @@ def evaluate_permutations(
                         recoveries.append(
                             recovery_record(
                                 context,
-                                permutation_seed,
+                                transformation_seed,
                                 label_values,
                                 reference_scores,
                                 raw_scores,
@@ -172,7 +174,7 @@ def _record_condition(
     prediction_file: TextIO,
     context: dict[str, Any],
     condition: str,
-    permutation_seed: int | None,
+    transformation_seed: int | None,
     row_ids: np.ndarray,
     labels: np.ndarray,
     scores: np.ndarray,
@@ -190,7 +192,7 @@ def _record_condition(
     record = {
         **context,
         "condition": condition,
-        "permutation_seed": permutation_seed,
+        "transformation_seed": transformation_seed,
         **values,
     }
     metrics.append(record)
@@ -199,7 +201,7 @@ def _record_condition(
             {
                 **context,
                 "condition": condition,
-                "permutation_seed": permutation_seed,
+                "transformation_seed": transformation_seed,
                 **row,
             },
             sort_keys=True,
@@ -215,16 +217,19 @@ def _save_transported_probes(
     probes: dict[str, StoredProbe],
     model: str,
     data_seed: int,
-    permutations: dict[int, torch.Tensor],
+    transformations: dict[int, CoordinateTransform],
     checksums: dict[str, str],
 ) -> None:
-    for permutation_seed, permutation in permutations.items():
-        transported = {name: probe.transport(permutation) for name, probe in probes.items()}
-        relative = f"probes/permutation_{permutation_seed}/seed_{data_seed}/{model}.safetensors"
+    for transformation_seed, transformation in transformations.items():
+        transported = {name: probe.transport(transformation) for name, probe in probes.items()}
+        relative = (
+            f"probes/{transformation.artifact_label}_{transformation_seed}/"
+            f"seed_{data_seed}/{model}.safetensors"
+        )
         checksums[relative] = save_probe_bundle(
             output_dir / relative,
             transported,
-            metadata_updates={"permutation_seed": permutation_seed},
+            metadata_updates={"transformation_seed": transformation_seed},
         )
 
 

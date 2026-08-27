@@ -81,22 +81,22 @@ def _symmetry(config: dict[str, Any]) -> dict[str, int]:
         symmetry["probed_depths"],
         symmetry["primary_depth"],
     )
-    permutations = len(symmetry["permutation_seeds"])
+    transformations = len(symmetry["transformation_seeds"])
     comparisons = seeds * models * family_depths
     estimated = estimated_alignment_enabled(config)
-    conditions = 2 + (3 + int(estimated)) * permutations
+    conditions = 2 + (3 + int(estimated)) * transformations
     outputs = {
         "metrics_rows": comparisons * conditions,
         "prediction_rows": comparisons * conditions * config["materials"]["expected_test_rows"],
-        "recovery_rows": comparisons * permutations,
-        "function_gate_rows": models * (1 + permutations),
-        "probe_bundles": seeds * models * permutations,
+        "recovery_rows": comparisons * transformations,
+        "function_gate_rows": models * (1 + transformations),
+        "probe_bundles": seeds * models * transformations,
     }
     smoke_rows = symmetry.get("smoke_gate_rows", 0)
     if smoke_rows:
-        outputs["function_smoke_gate_rows"] = models * (1 + permutations)
+        outputs["function_smoke_gate_rows"] = models * (1 + transformations)
     if estimated:
         outputs["alignment_diagnostic_rows"] = (
-            seeds * models * len(symmetry["probed_depths"]) * permutations
+            seeds * models * len(symmetry["probed_depths"]) * transformations
         )
     return outputs

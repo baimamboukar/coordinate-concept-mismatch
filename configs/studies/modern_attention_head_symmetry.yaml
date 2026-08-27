@@ -70,7 +70,7 @@ pipeline:
           query_heads: 32
           key_value_heads: 8
           head_dim: 128
-        permutation_seeds: [42, 137]
+        transformation_seeds: [42, 137]
         probed_depths: [0.75]
         primary_depth: 0.75
         gate_rows: 1699

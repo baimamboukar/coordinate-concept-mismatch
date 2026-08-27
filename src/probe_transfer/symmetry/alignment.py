@@ -10,18 +10,19 @@ from probe_transfer.alignment.methods import (
     alignment_diagnostic,
     fit_exact_permutation_alignment,
     fit_permutation_alignment,
+    fit_positive_diagonal_alignment,
 )
 from probe_transfer.extraction.activations import load_activation_split
+from probe_transfer.symmetry.coordinates import CoordinateTransform
 from probe_transfer.symmetry.protocol import estimated_alignment_enabled, selected_models
-from probe_transfer.symmetry.transforms import inverse_permutation
 
 MapKey = tuple[int, str, float, int]
 
 
-def estimate_permutation_maps(
+def estimate_transformation_maps(
     baseline_dir: Path,
     config: dict[str, Any],
-    permutations: dict[int, torch.Tensor],
+    transformations: dict[int, CoordinateTransform],
 ) -> tuple[dict[MapKey, AlignmentMap], list[dict[str, Any]]]:
     if not estimated_alignment_enabled(config):
         return {}, []
@@ -48,29 +49,35 @@ def estimate_permutation_maps(
                     "validation",
                 )
                 source_fit = train[:fit_rows]
-                for permutation_seed, permutation in permutations.items():
-                    index = permutation.numpy()
-                    target_fit = source_fit[:, index]
+                for transformation_seed, transformation in transformations.items():
+                    target_fit = transformation.apply_array(source_fit)
                     if settings["method"] == "exact_permutation":
                         fitted = fit_exact_permutation_alignment(source_fit, target_fit)
-                    else:
+                    elif settings["method"] == "permutation":
                         fitted = fit_permutation_alignment(
                             source_fit,
                             target_fit,
                             device=device,
                         )
-                    key = (data_seed, model, depth, permutation_seed)
+                    else:
+                        fitted = fit_positive_diagonal_alignment(
+                            source_fit,
+                            target_fit,
+                            relative_tolerance=settings["fit_relative_tolerance"],
+                        )
+                    key = (data_seed, model, depth, transformation_seed)
                     maps[key] = fitted
                     diagnostics.append(
                         _diagnostic(
                             fitted,
                             validation,
-                            permutation,
+                            transformation,
                             data_seed,
                             model,
                             depth,
-                            permutation_seed,
+                            transformation_seed,
                             fit_rows,
+                            settings.get("scale_match_rtol", 0.0),
                         )
                     )
     return maps, diagnostics
@@ -89,25 +96,39 @@ def _require_rows(values: np.ndarray, expected: int, split: str) -> None:
 def _diagnostic(
     fitted: AlignmentMap,
     source: np.ndarray,
-    permutation: torch.Tensor,
+    transformation: CoordinateTransform,
     data_seed: int,
     model: str,
     depth: float,
-    permutation_seed: int,
+    transformation_seed: int,
     fit_rows: int,
+    scale_match_rtol: float,
 ) -> dict[str, Any]:
-    if fitted.indices is None:
-        raise RuntimeError("Estimated permutation is missing feature indices.")
-    expected = inverse_permutation(permutation).cpu()
-    actual = fitted.indices.detach().cpu()
-    return {
+    target = transformation.apply_array(source)
+    record = {
         "data_seed": data_seed,
         "model": model,
         "depth": depth,
-        "permutation_seed": permutation_seed,
+        "transformation_seed": transformation_seed,
         "method": fitted.method,
         "fit_rows": fit_rows,
-        "permutation_match_fraction": float((actual == expected).float().mean().item()),
         **fitted.metadata,
-        **alignment_diagnostic(fitted, source, source[:, permutation.numpy()]),
+        **alignment_diagnostic(fitted, source, target),
     }
+    if transformation.kind == "permutation":
+        if fitted.indices is None:
+            raise RuntimeError("Estimated permutation is missing feature indices.")
+        expected = transformation.inverse().values.cpu()
+        actual = fitted.indices.detach().cpu()
+        record["permutation_match_fraction"] = float((actual == expected).float().mean().item())
+    else:
+        if fitted.scale is None or scale_match_rtol <= 0:
+            raise RuntimeError("Estimated positive diagonal is missing scales or tolerance.")
+        expected = transformation.inverse().values.float().cpu()
+        actual = fitted.scale.detach().float().cpu()
+        relative = torch.abs(actual - expected) / expected
+        record["scale_match_fraction"] = float(
+            torch.isclose(actual, expected, rtol=scale_match_rtol, atol=0).float().mean().item()
+        )
+        record["maximum_scale_relative_error"] = float(relative.max().item())
+    return record

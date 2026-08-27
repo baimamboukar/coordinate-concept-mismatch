@@ -111,6 +111,7 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
     expected_site = {
         "residual_permutation": RESIDUAL_STREAM,
         "mlp_neuron_permutation": MLP_INTERMEDIATE,
+        "mlp_positive_diagonal": MLP_INTERMEDIATE,
         "attention_head_permutation": ATTENTION_OUTPUT,
     }.get(transformation)
     if expected_site is None or site != expected_site:
@@ -124,10 +125,11 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
         raise ConfigError("Function gates must cover the complete protected test set.")
     if symmetry.get("gate_dtype") != "float64":
         raise ConfigError("Function-preservation gates must run in float64.")
-    if not symmetry.get("permutation_seeds"):
-        raise ConfigError("At least one permutation seed is required.")
-    if len(symmetry["permutation_seeds"]) != len(set(symmetry["permutation_seeds"])):
-        raise ConfigError("Permutation seeds must be unique.")
+    seeds = symmetry.get("transformation_seeds")
+    if not isinstance(seeds, list) or not seeds or any(type(seed) is not int for seed in seeds):
+        raise ConfigError("At least one integer transformation seed is required.")
+    if len(seeds) != len(set(seeds)):
+        raise ConfigError("Transformation seeds must be unique.")
     if symmetry.get("logit_atol", 0) <= 0 or symmetry.get("logit_rtol", 0) <= 0:
         raise ConfigError("Function-preservation tolerances must be positive.")
     widths = {activation_width(config["activations"], config["models"][name]) for name in models}
@@ -135,14 +137,21 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
         raise ConfigError("Every transformed model must match the configured activation width.")
     if transformation == "attention_head_permutation":
         _validate_attention_layout(config, models)
+    elif transformation == "mlp_positive_diagonal":
+        _validate_positive_diagonal(symmetry)
     smoke_rows = symmetry.get("smoke_gate_rows", 0)
     if smoke_rows < 0 or smoke_rows >= symmetry["gate_rows"]:
         raise ConfigError("Symmetry smoke rows must be non-negative and smaller than gate rows.")
     if estimated_alignment_enabled(config):
         settings = symmetry["estimated_alignment"]
         materials = config.get("materials", {})
-        if settings.get("method") not in {"permutation", "exact_permutation"}:
-            raise ConfigError("Known-symmetry estimation requires strict feature matching.")
+        expected_method = (
+            {"positive_diagonal"}
+            if transformation == "mlp_positive_diagonal"
+            else {"permutation", "exact_permutation"}
+        )
+        if settings.get("method") not in expected_method:
+            raise ConfigError("Known-symmetry estimation requires the matching strict method.")
         if settings.get("fit_split") != "train" or settings.get("diagnostic_split") != "validation":
             raise ConfigError(
                 "Estimated symmetry alignment requires train fit and validation diagnosis."
@@ -154,6 +163,22 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
             raise ConfigError("Estimated alignment validation rows must match the protected split.")
         if settings.get("device") not in {"cpu", "cuda", "auto"}:
             raise ConfigError("Estimated alignment device must be cpu, cuda, or auto.")
+
+
+def _validate_positive_diagonal(symmetry: dict[str, Any]) -> None:
+    scale_range = symmetry.get("scale_range")
+    if (
+        not isinstance(scale_range, list)
+        or len(scale_range) != 2
+        or any(type(value) not in {int, float} for value in scale_range)
+    ):
+        raise ConfigError("Positive-diagonal symmetry requires a two-value scale range.")
+    minimum, maximum = scale_range
+    if minimum <= 0 or minimum >= 1 or maximum <= 1 or abs(minimum * maximum - 1) > 1e-12:
+        raise ConfigError("Positive-diagonal scales must use a reciprocal range around one.")
+    settings = symmetry.get("estimated_alignment", {})
+    if settings.get("fit_relative_tolerance", 0) <= 0 or settings.get("scale_match_rtol", 0) <= 0:
+        raise ConfigError("Positive-diagonal estimation tolerances must be positive.")
 
 
 def _validate_attention_layout(config: dict[str, Any], models: list[str]) -> None:

@@ -5,7 +5,9 @@ import pytest
 import torch
 
 from probe_transfer.probes.transport import StoredProbe, load_probe_bundle, save_probe_bundle
+from probe_transfer.symmetry.coordinates import CoordinateTransform
 from probe_transfer.symmetry.evaluation import _select_probes
+from probe_transfer.symmetry.scales import seeded_positive_diagonal
 from probe_transfer.symmetry.transforms import seeded_permutation
 
 
@@ -64,6 +66,20 @@ def test_exact_probe_transport_preserves_scores(name: str) -> None:
 
     expected = probe.scores(activations)
     actual = probe.transport(permutation).scores(activations[:, permutation])
+
+    np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.parametrize("name", ["layer_75.linear", "layer_75.cp_degree_2", "layer_75.mlp"])
+def test_positive_diagonal_probe_transport_preserves_scores(name: str) -> None:
+    activations = np.random.default_rng(5).normal(size=(12, 8)).astype(np.float32)
+    transformation = CoordinateTransform(
+        "positive_diagonal", seeded_positive_diagonal(8, 42, 0.125, 8.0)
+    )
+    probe = probes(8)[name]
+
+    expected = probe.scores(activations)
+    actual = probe.transport(transformation).scores(transformation.apply_array(activations))
 
     np.testing.assert_allclose(actual, expected, rtol=1e-5, atol=1e-5)
 

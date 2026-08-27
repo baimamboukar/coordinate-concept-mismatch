@@ -1,6 +1,7 @@
 import pytest
 import torch
 
+from probe_transfer.symmetry.coordinates import CoordinateTransform
 from probe_transfer.symmetry.gate import GateOutputs, _gate_record
 from probe_transfer.symmetry.runner import _require_gate_pass
 
@@ -21,8 +22,9 @@ def test_function_gate_uses_combined_logit_tolerance() -> None:
         42,
         reference,
         actual,
-        torch.arange(2),
+        CoordinateTransform.identity("permutation", 2),
         {
+            "transformation": "residual_permutation",
             "gate_dtype": "float64",
             "logit_atol": 1e-3,
             "logit_rtol": 1e-4,
@@ -37,7 +39,7 @@ def test_function_gate_uses_combined_logit_tolerance() -> None:
 
 def test_failed_function_gate_is_preserved(tmp_path) -> None:
     gate = {
-        "permutation_seed": 137,
+        "transformation_seed": 137,
         "maximum_logit_error": 2e-5,
         "maximum_activation_relative_error": 3e-6,
         "next_token_agreement": 1.0,

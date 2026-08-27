@@ -163,7 +163,7 @@ pipeline:
         transformation: residual_permutation
         models: [mistral, llama, qwen]
         width: 4096
-        permutation_seeds: [42, 137]
+        transformation_seeds: [42, 137]
         probed_depths: [0.75]
         primary_depth: 0.75
         gate_rows: 1699

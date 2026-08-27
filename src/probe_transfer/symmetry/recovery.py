@@ -8,7 +8,7 @@ from probe_transfer.probes.evaluation import paired_auroc_gap_interval
 
 def recovery_record(
     context: dict[str, Any],
-    permutation_seed: int,
+    transformation_seed: int,
     labels: np.ndarray,
     reference: np.ndarray,
     raw: np.ndarray,
@@ -55,7 +55,7 @@ def recovery_record(
     )
     record = {
         **context,
-        "permutation_seed": permutation_seed,
+        "transformation_seed": transformation_seed,
         "reference_auroc": reference_auroc,
         "raw_auroc": raw_auroc,
         "transported_auroc": transported_auroc,

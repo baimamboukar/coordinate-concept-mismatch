@@ -10,7 +10,7 @@ from safetensors.torch import save_file
 from torch.nn import functional
 
 from probe_transfer.artifacts import sha256_file
-from probe_transfer.symmetry.transforms import validate_permutation
+from probe_transfer.symmetry.coordinates import CoordinateTransform
 
 
 @dataclass(frozen=True)
@@ -68,15 +68,20 @@ class StoredProbe:
             raise ValueError(f"Unsupported stored probe kind: {self.kind}")
         return scores.squeeze(-1).numpy()
 
-    def transport(self, permutation: torch.Tensor) -> "StoredProbe":
-        validate_permutation(permutation)
-        if len(permutation) != self.tensors["preprocessor.mean"].numel():
-            raise ValueError(f"Probe {self.name} and permutation widths do not match.")
+    def transport(self, coordinates: CoordinateTransform | torch.Tensor) -> "StoredProbe":
+        if isinstance(coordinates, torch.Tensor):
+            coordinates = CoordinateTransform("permutation", coordinates)
+        if len(coordinates.values) != self.tensors["preprocessor.mean"].numel():
+            raise ValueError(f"Probe {self.name} and coordinate widths do not match.")
 
         tensors = {name: value.clone() for name, value in self.tensors.items()}
-        tensors["preprocessor.mean"] = tensors["preprocessor.mean"].index_select(0, permutation)
+        tensors["preprocessor.mean"] = coordinates.apply_tensor(tensors["preprocessor.mean"])
         for name in _input_weights(self.kind):
-            tensors[name] = tensors[name].index_select(1, permutation)
+            if coordinates.kind == "permutation":
+                tensors[name] = tensors[name].index_select(1, coordinates.values)
+            else:
+                scales = coordinates.values.to(tensors[name].dtype)
+                tensors[name] = tensors[name] / scales[None, :]
         return StoredProbe(self.name, self.kind, tensors, dict(self.details))
 
 

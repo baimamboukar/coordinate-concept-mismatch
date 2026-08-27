@@ -5,18 +5,18 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-import torch
-
 from core.constants import ACTIVATION_ROWS_ENV, BASELINE_ARTIFACT_ENV, EXPERIMENT_OUTPUT_ENV
 from core.tracking import Tracker
 from probe_transfer.artifacts import write_json, write_jsonl
 from probe_transfer.atomic import publish_directories
 from probe_transfer.data import load_prepared_rows
 from probe_transfer.extraction.runtime import validate_cuda_runtime, validate_free_disk
-from probe_transfer.symmetry.alignment import estimate_permutation_maps
-from probe_transfer.symmetry.evaluation import evaluate_permutations
+from probe_transfer.symmetry.alignment import estimate_transformation_maps
+from probe_transfer.symmetry.coordinates import CoordinateTransform
+from probe_transfer.symmetry.evaluation import evaluate_transformations
 from probe_transfer.symmetry.gate import run_function_gates
 from probe_transfer.symmetry.protocol import estimated_alignment_enabled
+from probe_transfer.symmetry.scales import seeded_positive_diagonal
 from probe_transfer.symmetry.transforms import (
     seeded_gqa_head_permutation,
     seeded_permutation,
@@ -38,37 +38,38 @@ def run_symmetry_experiment(config: dict[str, Any], tracker: Tracker) -> None:
         "Runtime",
         f"{runtime['gpu']} with {runtime['memory_gb']:.1f} GiB; {free_disk:.1f} GiB free.",
     )
-    permutations = _seeded_permutations(symmetry)
+    transformations = _seeded_transformations(symmetry)
     rows = load_prepared_rows(
         prepared / "test.jsonl", config["materials"]["expected_test_rows"], require_balanced=False
     )
     with TemporaryDirectory(prefix=".symmetry-", dir=output) as temporary:
         staging = Path(temporary)
+        prototype = next(iter(transformations.values()))
         write_json(
-            staging / "results" / "permutations.json",
-            {str(seed): permutation.tolist() for seed, permutation in permutations.items()},
+            staging / "results" / prototype.map_filename,
+            {str(seed): item.values.tolist() for seed, item in transformations.items()},
         )
         smoke_rows = symmetry.get("smoke_gate_rows", 0)
         if smoke_rows:
-            smoke = run_function_gates(config, rows[:smoke_rows], permutations)
+            smoke = run_function_gates(config, rows[:smoke_rows], transformations)
             write_jsonl(staging / "results" / "function_gate_smoke.jsonl", smoke)
             _require_gate_pass(smoke, "fail-fast", output)
 
-        gates = run_function_gates(config, rows, permutations)
+        gates = run_function_gates(config, rows, transformations)
         write_jsonl(staging / "results" / "function_gates.jsonl", gates)
         _require_gate_pass(gates, "full-test", output)
 
-        maps, diagnostics = estimate_permutation_maps(baseline, config, permutations)
+        maps, diagnostics = estimate_transformation_maps(baseline, config, transformations)
         if estimated_alignment_enabled(config):
             write_jsonl(
                 staging / "results" / "alignment_diagnostics.jsonl",
                 diagnostics,
             )
-        recoveries, _ = evaluate_permutations(
+        recoveries, _ = evaluate_transformations(
             baseline,
             staging,
             config,
-            permutations,
+            transformations,
             estimated_maps=maps,
         )
         _validate_outputs(staging, config)
@@ -108,7 +109,7 @@ def _require_gate_pass(gates: list[dict[str, Any]], phase: str, output: Path) ->
     if failed:
         write_jsonl(output / "diagnostics" / f"{phase}_function_gates.jsonl", gates)
         details = "; ".join(
-            f"seed={gate['permutation_seed']} logits={gate['maximum_logit_error']:.3e} "
+            f"seed={gate['transformation_seed']} logits={gate['maximum_logit_error']:.3e} "
             f"activations={gate['maximum_activation_relative_error']:.3e} "
             f"agreement={gate['next_token_agreement']:.6f}"
             for gate in failed
@@ -133,7 +134,12 @@ def _validate_outputs(output: Path, config: dict[str, Any]) -> None:
             actual = sum(1 for _ in handle)
         if actual != expected[name]:
             raise ValueError(f"Expected {expected[name]} rows in {path}, found {actual}.")
-    bundles = list((output / "probes").glob("permutation_*/seed_*/*.safetensors"))
+    label = (
+        "scale"
+        if config["symmetry"]["transformation"] == "mlp_positive_diagonal"
+        else "permutation"
+    )
+    bundles = list((output / "probes").glob(f"{label}_*/seed_*/*.safetensors"))
     if len(bundles) != expected["probe_bundles"]:
         raise ValueError("Unexpected number of transported probe bundles.")
     for path in (output / "results").glob("*.jsonl"):
@@ -157,17 +163,32 @@ def _required_directory(name: str, *, create: bool = False) -> Path:
     return path
 
 
-def _seeded_permutations(symmetry: dict[str, Any]) -> dict[int, torch.Tensor]:
-    seeds = symmetry["permutation_seeds"]
+def _seeded_transformations(symmetry: dict[str, Any]) -> dict[int, CoordinateTransform]:
+    seeds = symmetry["transformation_seeds"]
+    if symmetry["transformation"] == "mlp_positive_diagonal":
+        minimum, maximum = symmetry["scale_range"]
+        return {
+            seed: CoordinateTransform(
+                "positive_diagonal",
+                seeded_positive_diagonal(symmetry["width"], seed, minimum, maximum),
+            )
+            for seed in seeds
+        }
     if symmetry["transformation"] != "attention_head_permutation":
-        return {seed: seeded_permutation(symmetry["width"], seed) for seed in seeds}
+        return {
+            seed: CoordinateTransform("permutation", seeded_permutation(symmetry["width"], seed))
+            for seed in seeds
+        }
     layout = symmetry["attention_layout"]
     return {
-        seed: seeded_gqa_head_permutation(
-            layout["query_heads"],
-            layout["key_value_heads"],
-            layout["head_dim"],
-            seed,
+        seed: CoordinateTransform(
+            "permutation",
+            seeded_gqa_head_permutation(
+                layout["query_heads"],
+                layout["key_value_heads"],
+                layout["head_dim"],
+                seed,
+            ),
         )
         for seed in seeds
     }

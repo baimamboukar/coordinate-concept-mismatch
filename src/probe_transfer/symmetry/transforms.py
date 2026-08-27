@@ -3,6 +3,18 @@ from typing import Any
 import numpy as np
 import torch
 
+from probe_transfer.symmetry.coordinates import (
+    CoordinateTransform,
+    validate_permutation,
+)
+from probe_transfer.symmetry.coordinates import (
+    inverse_permutation as _inverse_permutation,
+)
+from probe_transfer.symmetry.coordinates import (
+    relative_permutation as _relative_permutation,
+)
+from probe_transfer.symmetry.scales import rescale_mlp_up_branch
+
 
 def seeded_permutation(width: int, seed: int) -> torch.Tensor:
     if width < 1:
@@ -25,16 +37,11 @@ def seeded_gqa_head_permutation(
 
 
 def inverse_permutation(permutation: torch.Tensor) -> torch.Tensor:
-    validate_permutation(permutation)
-    return torch.argsort(permutation)
+    return _inverse_permutation(permutation)
 
 
 def relative_permutation(current: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    validate_permutation(current)
-    validate_permutation(target)
-    if current.shape != target.shape:
-        raise ValueError("Current and target permutations must have equal width.")
-    return inverse_permutation(current).index_select(0, target)
+    return _relative_permutation(current, target)
 
 
 def permute_gpt_neox_residual(model: Any, permutation: torch.Tensor) -> None:
@@ -189,12 +196,20 @@ def permute_attention_heads(
             _permute_parameter(attention.o_proj.weight, permutation, dim=1)
 
 
-def apply_symmetry_permutation(
+def apply_symmetry_transform(
     model: Any,
-    permutation: torch.Tensor,
+    coordinates: CoordinateTransform,
     transformation: str,
     block_indices: tuple[int, ...],
 ) -> None:
+    if transformation == "mlp_positive_diagonal":
+        if coordinates.kind != "positive_diagonal":
+            raise ValueError("MLP positive-diagonal symmetry requires positive scales.")
+        rescale_mlp_up_branch(model, coordinates.values, block_indices)
+        return
+    if coordinates.kind != "permutation":
+        raise ValueError(f"{transformation} requires a coordinate permutation.")
+    permutation = coordinates.values
     if transformation == "residual_permutation":
         permute_residual(model, permutation)
     elif transformation == "mlp_neuron_permutation":
@@ -214,14 +229,6 @@ def _permute_output(module: Any, permutation: torch.Tensor) -> None:
 def _permute_parameter(parameter: torch.Tensor, permutation: torch.Tensor, *, dim: int) -> None:
     index = permutation.to(parameter.device)
     parameter.copy_(parameter.index_select(dim, index))
-
-
-def validate_permutation(permutation: torch.Tensor) -> None:
-    if permutation.ndim != 1 or permutation.dtype != torch.int64:
-        raise ValueError("A permutation must be a one-dimensional int64 tensor.")
-    expected = torch.arange(len(permutation), dtype=torch.int64, device=permutation.device)
-    if not torch.equal(torch.sort(permutation).values, expected):
-        raise ValueError("Permutation entries must contain each coordinate exactly once.")
 
 
 def _validate_attention_layout(query_heads: int, key_value_heads: int, head_dim: int) -> None:

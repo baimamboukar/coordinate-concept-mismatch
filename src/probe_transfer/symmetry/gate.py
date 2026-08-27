@@ -11,8 +11,9 @@ from probe_transfer.extraction.models import (
 )
 from probe_transfer.extraction.runtime import validate_loaded_model
 from probe_transfer.extraction.sites import ActivationCapture, activation_width
+from probe_transfer.symmetry.coordinates import CoordinateTransform
 from probe_transfer.symmetry.protocol import selected_models
-from probe_transfer.symmetry.transforms import apply_symmetry_permutation, relative_permutation
+from probe_transfer.symmetry.transforms import apply_symmetry_transform
 
 
 @dataclass(frozen=True)
@@ -24,7 +25,7 @@ class GateOutputs:
 def run_function_gates(
     config: dict[str, Any],
     rows: list[dict[str, Any]],
-    permutations: dict[int, torch.Tensor],
+    transformations: dict[int, CoordinateTransform],
 ) -> list[dict[str, Any]]:
     symmetry = config["symmetry"]
     records = []
@@ -44,15 +45,16 @@ def run_function_gates(
         reference = _collect_outputs(tokenizer, model, rows, model_config, symmetry, site)
         width = activation_width(config["activations"], model_config)
         blocks = tuple(resolve_block_indices(model_config["layers"], symmetry["probed_depths"]))
-        current = torch.arange(width)
-        targets: list[tuple[str, int | None, torch.Tensor]] = [
-            ("identity", None, torch.arange(width)),
-            *[("permutation", seed, permutation) for seed, permutation in permutations.items()],
+        kind = next(iter(transformations.values())).kind
+        current = CoordinateTransform.identity(kind, width)
+        targets = [
+            ("identity", None, current),
+            *[("transformation", seed, item) for seed, item in transformations.items()],
         ]
         for condition, seed, target in targets:
-            apply_symmetry_permutation(
+            apply_symmetry_transform(
                 model,
-                relative_permutation(current, target),
+                target.relative_from(current),
                 symmetry["transformation"],
                 blocks,
             )
@@ -129,7 +131,7 @@ def _gate_record(
     seed: int | None,
     reference: GateOutputs,
     actual: GateOutputs,
-    target: torch.Tensor,
+    target: CoordinateTransform,
     config: dict[str, Any],
     *,
     activation_site: str = "residual_stream",
@@ -144,9 +146,9 @@ def _gate_record(
     )
     activation_errors = {}
     for key, expected in reference.hidden_states.items():
-        permuted = expected.index_select(1, target)
-        error = torch.linalg.vector_norm(actual.hidden_states[key] - permuted)
-        denominator = torch.clamp(torch.linalg.vector_norm(permuted), min=1e-12)
+        transformed = target.apply_tensor(expected)
+        error = torch.linalg.vector_norm(actual.hidden_states[key] - transformed)
+        denominator = torch.clamp(torch.linalg.vector_norm(transformed), min=1e-12)
         activation_errors[key] = float(error / denominator)
     maximum_activation_error = max(activation_errors.values())
     passed = bool(
@@ -157,7 +159,8 @@ def _gate_record(
     return {
         "model": model,
         "condition": condition,
-        "permutation_seed": seed,
+        "transformation": config["transformation"],
+        "transformation_seed": seed,
         "rows": len(reference.logits),
         "logit_position": "last_non_padding",
         "activation_site": activation_site,

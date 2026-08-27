@@ -134,6 +134,39 @@ def fit_exact_permutation_alignment(source: np.ndarray, target: np.ndarray) -> A
     )
 
 
+def fit_positive_diagonal_alignment(
+    source: np.ndarray, target: np.ndarray, *, relative_tolerance: float
+) -> AlignmentMap:
+    """Fit a label-free positive diagonal map from target coordinates to source."""
+    if relative_tolerance <= 0:
+        raise ValueError("Positive-diagonal fit tolerance must be positive.")
+    source_values = np.asarray(source, dtype=np.float64)
+    target_values = np.asarray(target, dtype=np.float64)
+    if (
+        source_values.ndim != 2
+        or source_values.shape != target_values.shape
+        or len(source_values) < 2
+    ):
+        raise ValueError("Alignment requires paired two-dimensional arrays of equal shape.")
+
+    denominator = np.sum(target_values * target_values, axis=0)
+    if np.any(denominator <= np.finfo(np.float64).tiny):
+        raise ValueError("Positive-diagonal alignment contains an unidentifiable feature.")
+    inverse_scale = np.sum(target_values * source_values, axis=0) / denominator
+    if np.any(~np.isfinite(inverse_scale)) or np.any(inverse_scale <= 0):
+        raise ValueError("Estimated diagonal map is not finite and strictly positive.")
+    residual = target_values * inverse_scale - source_values
+    relative_error = np.linalg.norm(residual) / max(np.linalg.norm(source_values), 1e-12)
+    if relative_error > relative_tolerance:
+        raise ValueError("Paired activations are not related by a positive diagonal map.")
+    return AlignmentMap(
+        "positive_diagonal",
+        indices=torch.arange(source_values.shape[1], dtype=torch.int64),
+        scale=torch.from_numpy(inverse_scale.astype(np.float32)),
+        metadata={"fit_relative_error": float(relative_error)},
+    )
+
+
 def fit_affine_ridge(
     source: torch.Tensor,
     target: torch.Tensor,

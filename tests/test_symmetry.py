@@ -13,6 +13,8 @@ from transformers import (
     Qwen3ForCausalLM,
 )
 
+from probe_transfer.symmetry.coordinates import CoordinateTransform
+from probe_transfer.symmetry.scales import rescale_mlp_up_branch, seeded_positive_diagonal
 from probe_transfer.symmetry.transforms import (
     permute_gpt_neox_residual,
     permute_mistral_residual,
@@ -179,6 +181,42 @@ def test_mlp_neuron_permutation_preserves_logits_and_permutes_site() -> None:
         expected.hidden_states, actual.hidden_states, strict=True
     ):
         torch.testing.assert_close(actual_hidden, expected_hidden, rtol=1e-6, atol=1e-7)
+
+
+def test_mlp_positive_diagonal_preserves_logits_and_rescales_site() -> None:
+    torch.manual_seed(31)
+    reference = tiny_mistral().double()
+    transformed = deepcopy(reference)
+    scales = seeded_positive_diagonal(32, 42, 0.125, 8.0)
+    input_ids = torch.randint(0, 37, (3, 9))
+
+    expected, expected_site = _mlp_outputs(reference, input_ids, block_index=2)
+    rescale_mlp_up_branch(transformed, scales, (2,))
+    actual, actual_site = _mlp_outputs(transformed, input_ids, block_index=2)
+
+    torch.testing.assert_close(actual.logits, expected.logits, rtol=1e-6, atol=1e-7)
+    torch.testing.assert_close(actual_site, expected_site * scales, rtol=1e-6, atol=1e-7)
+    for expected_hidden, actual_hidden in zip(
+        expected.hidden_states, actual.hidden_states, strict=True
+    ):
+        torch.testing.assert_close(actual_hidden, expected_hidden, rtol=1e-6, atol=1e-7)
+
+
+def test_relative_positive_diagonal_reaches_second_absolute_scale() -> None:
+    torch.manual_seed(37)
+    reference = tiny_mistral().double()
+    transformed = deepcopy(reference)
+    first = CoordinateTransform("positive_diagonal", seeded_positive_diagonal(32, 42, 0.125, 8.0))
+    second = CoordinateTransform("positive_diagonal", seeded_positive_diagonal(32, 137, 0.125, 8.0))
+    input_ids = torch.randint(0, 37, (2, 7))
+
+    expected, expected_site = _mlp_outputs(reference, input_ids, block_index=2)
+    rescale_mlp_up_branch(transformed, first.values, (2,))
+    rescale_mlp_up_branch(transformed, second.relative_from(first).values, (2,))
+    actual, actual_site = _mlp_outputs(transformed, input_ids, block_index=2)
+
+    torch.testing.assert_close(actual.logits, expected.logits, rtol=1e-6, atol=1e-7)
+    torch.testing.assert_close(actual_site, expected_site * second.values, rtol=1e-6, atol=1e-7)
 
 
 def _assert_llama_family_permutation(model: torch.nn.Module) -> None:
