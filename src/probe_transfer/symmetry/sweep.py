@@ -75,7 +75,61 @@ def scale_sweep_metrics(
                 / len(rows),
             }
         )
+    metrics.update(_probe_sensitivity_metrics(recoveries, symmetry))
     return metrics
+
+
+def _probe_sensitivity_metrics(
+    recoveries: list[dict[str, Any]], symmetry: dict[str, Any]
+) -> dict[str, float]:
+    settings = symmetry.get("probe_sensitivity")
+    if settings is None:
+        return {}
+    target = settings["target_family"]
+    comparisons = settings["comparison_families"]
+    viable = all(
+        float(row["reference_auroc"]) >= settings["minimum_reference_auroc"] for row in recoveries
+    )
+    metrics = {"scale_sweep/task_viability_supported": float(viable)}
+    supported = []
+    for variant in settings["variants"]:
+        rows = [row for row in recoveries if row["transformation_variant"] == variant]
+        target_rows = [row for row in rows if row["probe_family"] == target]
+        comparison_rows = [row for row in rows if row["probe_family"] in comparisons]
+        if not target_rows or not comparison_rows:
+            raise ValueError(f"Missing probe-sensitivity rows for scale range: {variant}")
+        target_failures = sum(bool(row["coordinate_failure"]) for row in target_rows)
+        comparison_failures = sum(bool(row["coordinate_failure"]) for row in comparison_rows)
+        target_gap = _mean_gap(target_rows)
+        comparison_gap = max(
+            _mean_gap([row for row in comparison_rows if row["probe_family"] == family])
+            for family in comparisons
+        )
+        advantage = target_gap - comparison_gap
+        passed = (
+            target_failures >= settings["minimum_target_failures"]
+            and comparison_failures <= settings["maximum_comparison_failures"]
+            and advantage >= settings["minimum_mean_gap_advantage"]
+        )
+        supported.append(passed)
+        prefix = f"scale_sweep/{variant}"
+        metrics.update(
+            {
+                f"{prefix}/target_family_failure_fraction": target_failures / len(target_rows),
+                f"{prefix}/comparison_family_failure_fraction": comparison_failures
+                / len(comparison_rows),
+                f"{prefix}/target_family_mean_raw_auroc_gap": target_gap,
+                f"{prefix}/maximum_comparison_family_mean_raw_auroc_gap": comparison_gap,
+                f"{prefix}/target_gap_advantage": advantage,
+                f"{prefix}/probe_sensitivity_supported": float(passed),
+            }
+        )
+    metrics["scale_sweep/probe_sensitivity_supported"] = float(viable and all(supported))
+    return metrics
+
+
+def _mean_gap(rows: list[dict[str, Any]]) -> float:
+    return sum(float(row["raw_auroc_gap"]) for row in rows) / len(rows)
 
 
 def _spearman(values: list[float]) -> float:

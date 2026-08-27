@@ -45,10 +45,12 @@ def prepare_dataset(config: dict[str, Any], tracker: Any) -> Path:
                 write_jsonl(staging / f"seed_{seed}_{split}.jsonl", map(_public_row, rows))
 
     labels = Counter(row["label"] for row in clean_test)
+    negative = dataset["negative_label"]
+    positive = dataset["positive_label"]
     tracker.report(
         "Data",
         f"Prepared the protected {len(clean_test):,}-row test set "
-        f"({labels[0]:,} unharmful, {labels[1]:,} harmful) and deterministic train/validation "
+        f"({labels[0]:,} {negative}, {labels[1]:,} {positive}) and deterministic train/validation "
         f"splits for seeds {config['data_seeds']}. Removed "
         f"{audit['train'].get('duplicate_prompt', 0):,} duplicate train rows.",
     )

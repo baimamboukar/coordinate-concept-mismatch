@@ -87,3 +87,32 @@ def test_splits_are_balanced_deterministic_and_test_protected() -> None:
     assert all(row["prompt"] != "conflict" for row in first[42]["train"])
     assert audit["train"]["protected_test_overlap"] == 1
     assert audit["train"]["conflicting_label_prompts"] == 1
+
+
+def test_splits_accept_numeric_labels_without_a_stratification_field() -> None:
+    train = [
+        {"sentence": f"sentiment {label} {index}", "label": label}
+        for label in (0, 1)
+        for index in range(12)
+    ]
+    test = [
+        {"sentence": "negative test", "label": 0},
+        {"sentence": "positive test", "label": 1},
+    ]
+
+    protected, seeded, _ = prepare_splits(
+        train,
+        test,
+        train_size=12,
+        validation_size=4,
+        seeds=[42],
+        prompt_field="sentence",
+        label_field="label",
+        positive_label=1,
+        negative_label=0,
+        adversarial_field=None,
+    )
+
+    assert {row["label"] for row in protected} == {0, 1}
+    assert sum(row["label"] for row in seeded[42]["train"]) == 6
+    assert all(row["adversarial"] is None for row in seeded[42]["train"])

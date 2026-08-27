@@ -17,6 +17,11 @@ def sweep_config() -> dict:
     return materialize_stage(study, "symmetry")
 
 
+def sentiment_config(stage: str = "symmetry") -> dict:
+    study = load_config(CONFIGS_DIR / "studies" / "sentiment_positive_diagonal_scale_sweep.yaml")
+    return materialize_stage(study, stage)
+
+
 def test_scale_sweep_contract_is_derived() -> None:
     config = sweep_config()
 
@@ -34,6 +39,30 @@ def test_scale_sweep_contract_is_derived() -> None:
         "probe_bundles": 16,
         "function_smoke_gate_rows": 9,
         "alignment_diagnostic_rows": 16,
+    }
+
+
+def test_sentiment_scale_sweep_reuses_the_protocol_with_new_task_materials() -> None:
+    symmetry = sentiment_config()
+    transfer = sentiment_config("transfer")
+
+    assert symmetry["dataset"]["id"] == "stanfordnlp/sst2"
+    assert symmetry["sampling"]["test_size"] == 872
+    assert symmetry["symmetry"]["probe_sensitivity"]["target_family"] == "cp_degree_2"
+    assert symmetry["expected_outputs"] == {
+        "metrics_rows": 204,
+        "prediction_rows": 177888,
+        "recovery_rows": 48,
+        "function_gate_rows": 9,
+        "probe_bundles": 16,
+        "function_smoke_gate_rows": 9,
+        "alignment_diagnostic_rows": 16,
+    }
+    assert transfer["expected_outputs"] == {
+        "metrics_rows": 6,
+        "prediction_rows": 5232,
+        "transfer_gap_rows": 0,
+        "probe_bundles": 2,
     }
 
 
@@ -108,9 +137,54 @@ def test_scale_sweep_summary_applies_prespecified_rules() -> None:
     assert metrics["scale_sweep/strong/coordinate_failure_fraction"] == 1.0
 
 
+def test_probe_family_sensitivity_applies_out_of_task_replication_rule() -> None:
+    recoveries = []
+    gaps = {
+        "linear": [0.002, 0.02, 0.04, 0.06],
+        "cp_degree_2": [0.003, 0.03, 0.15, 0.22],
+        "mlp": [0.001, 0.01, 0.02, 0.03],
+    }
+    variants = ["mild", "moderate", "strong", "extreme"]
+    for data_seed in (42, 137):
+        for family, family_gaps in gaps.items():
+            for transformation_seed in (42, 137):
+                for variant, gap in zip(variants, family_gaps, strict=True):
+                    recoveries.append(
+                        {
+                            "data_seed": data_seed,
+                            "model": "mistral",
+                            "depth": 0.75,
+                            "probe_family": family,
+                            "transformation_seed": transformation_seed,
+                            "transformation_variant": variant,
+                            "reference_auroc": 0.90,
+                            "raw_auroc_gap": gap,
+                            "coordinate_failure": family == "cp_degree_2" and gap >= 0.10,
+                            "exact_recovery": True,
+                            "estimated_recovery": True,
+                        }
+                    )
+
+    metrics = scale_sweep_metrics(recoveries, sentiment_config()["symmetry"])
+
+    assert metrics["scale_sweep/task_viability_supported"] == 1.0
+    assert metrics["scale_sweep/probe_sensitivity_supported"] == 1.0
+    assert metrics["scale_sweep/strong/target_family_failure_fraction"] == 1.0
+    assert metrics["scale_sweep/strong/comparison_family_failure_fraction"] == 0.0
+    assert metrics["scale_sweep/strong/target_gap_advantage"] == pytest.approx(0.11)
+
+
 def test_scale_sweep_rejects_nonreciprocal_ranges() -> None:
     config = deepcopy(sweep_config())
     config["symmetry"]["scale_ranges"]["strong"] = [0.04, 32.0]
 
     with pytest.raises(ConfigError, match="reciprocal range"):
+        validate_stage(config)
+
+
+def test_probe_sensitivity_cannot_cherry_pick_comparison_families() -> None:
+    config = deepcopy(sentiment_config())
+    config["symmetry"]["probe_sensitivity"]["comparison_families"] = ["linear"]
+
+    with pytest.raises(ConfigError, match="every other primary family"):
         validate_stage(config)

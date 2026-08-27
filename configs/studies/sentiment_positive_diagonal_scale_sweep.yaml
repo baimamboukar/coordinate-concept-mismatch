@@ -1,0 +1,74 @@
+extends: modern_mlp_positive_diagonal_scale_sweep.yaml
+name: sentiment_positive_diagonal_scale_sweep
+
+dataset:
+  backend: huggingface
+  id: stanfordnlp/sst2
+  revision: 8d51e7e4887a4caaa95b3fbebbf53c0490b58bbb
+  train: {subset: null, split: train}
+  test: {subset: null, split: validation}
+  prompt_field: sentence
+  label_field: label
+  positive_label: 1
+  negative_label: 0
+  adversarial_field: null
+
+sampling:
+  train_size: 12000
+  validation_size: 2000
+  test_size: 872
+  balance_labels: true
+  stratify_by: []
+  protect_test: true
+
+artifacts:
+  dataset_key: sst2-sentiment-v1
+
+pipeline:
+  stages:
+    prepare:
+      name: positive_diagonal_task_generalization
+      tracking: {wandb: false, local_report: false}
+    preflight:
+      name: positive_diagonal_task_generalization
+      tracking: {wandb: false, local_report: false}
+    extract:
+      name: positive_diagonal_task_generalization
+      tracking: {wandb: false, local_report: false}
+    transfer:
+      name: positive_diagonal_task_generalization
+      artifact_variant: baseline
+      training: true
+      evaluation:
+        primary_metrics: [auroc]
+        pair_groups: {}
+        oracle_gate: 0.75
+        minimum_gap: 0.10
+    symmetry:
+      name: positive_diagonal_task_generalization
+      materials:
+        source_name: positive_diagonal_task_generalization
+        source_study: sentiment_positive_diagonal_scale_sweep
+        source_variant: baseline
+        expected_train_rows: 12000
+        expected_validation_rows: 2000
+        expected_test_rows: 872
+      symmetry:
+        gate_rows: 872
+        probe_sensitivity:
+          target_family: cp_degree_2
+          comparison_families: [linear, mlp]
+          variants: [strong, extreme]
+          minimum_target_failures: 3
+          maximum_comparison_failures: 2
+          minimum_mean_gap_advantage: 0.05
+          minimum_reference_auroc: 0.75
+      evaluation:
+        primary_metrics:
+          - raw_auroc_gap_by_scale_range
+          - dose_response_supported
+          - first_robust_failure_range
+          - probe_family_sensitivity_supported
+          - task_viability_supported
+          - recovery_fraction
+          - estimated_recovery_fraction

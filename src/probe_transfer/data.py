@@ -14,9 +14,9 @@ from core.reproducibility import is_pinned_hf_revision
 class CleanRowFields(TypedDict):
     prompt_field: str
     label_field: str
-    positive_label: str
-    negative_label: str
-    adversarial_field: str
+    positive_label: Any
+    negative_label: Any
+    adversarial_field: str | None
 
 
 def load_huggingface_dataset(
@@ -89,9 +89,9 @@ def clean_rows(
     *,
     prompt_field: str,
     label_field: str,
-    positive_label: str,
-    negative_label: str,
-    adversarial_field: str,
+    positive_label: Any,
+    negative_label: Any,
+    adversarial_field: str | None,
     reserved_digests: set[str] | None = None,
     audit: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
@@ -128,7 +128,7 @@ def clean_rows(
                 "prompt": prompt,
                 "prompt_sha256": digest,
                 "label": encoded_label,
-                "adversarial": row.get(adversarial_field),
+                "adversarial": row.get(adversarial_field) if adversarial_field else None,
             },
         }
 
@@ -155,9 +155,9 @@ def prepare_splits(
     seeds: list[int],
     prompt_field: str,
     label_field: str,
-    positive_label: str,
-    negative_label: str,
-    adversarial_field: str,
+    positive_label: Any,
+    negative_label: Any,
+    adversarial_field: str | None,
 ) -> tuple[
     list[dict[str, Any]],
     dict[int, dict[str, list[dict[str, Any]]]],

@@ -4,6 +4,7 @@ from typing import Any
 
 from core.config import ConfigError, validate_evaluation
 from core.constants import HF_BUCKET
+from pipeline.sweep_validation import validate_probe_sensitivity
 from probe_transfer.alignment.materials import direction_groups
 from probe_transfer.extraction.sites import (
     ACTIVATION_SITES,
@@ -239,6 +240,7 @@ def _validate_dose_response(config: dict[str, Any], variants: list[str]) -> None
         value = settings.get(key)
         if type(value) is not int or not 1 <= value <= comparisons:
             raise ConfigError(f"{key} must be an integer between one and {comparisons}.")
+    validate_probe_sensitivity(config, variants)
 
 
 def _validate_attention_layout(config: dict[str, Any], models: list[str]) -> None:
