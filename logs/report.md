@@ -20,7 +20,7 @@ The GQA attention-head control extended this result to the pre-output-projection
 
 The positive-diagonal MLP control then held the model, site, data, and probes fixed while changing the symmetry type. Mean AUROC fell only from 0.908 to 0.878; none of 12 comparisons met the prespecified 0.10 failure threshold, although analytic and label-free transport recovered all 12. This contrast shows that exact symmetries are not uniformly disruptive: transformation geometry and magnitude affect probe fragility.
 
-The preregistered scale sweep resolved the magnitude question. Mean gaps rose monotonically from 0.003 to 0.109, and all 12 paired trajectories had Spearman $\rho=1.0$. Nevertheless, no range reached the required 10 of 12 failures; strong and extreme each reached 4 of 12. Exact and estimated transport matched reference scores in all 48 comparisons.
+The preregistered scale sweep resolved the magnitude question. Mean gaps rose monotonically from 0.003 to 0.109, and all 12 paired trajectories had Spearman $\rho=1.0$. Nevertheless, no range reached the required 10 of 12 failures; strong and extreme each reached 4 of 12, all from degree-2 CP probes. Exact and estimated transport matched reference scores in all 48 comparisons.
 
 ## Current conclusion and next step
 

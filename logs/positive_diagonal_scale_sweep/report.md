@@ -18,7 +18,7 @@ All 9 smoke gates and all 9 full gates passed over 1,699 protected prompts. Next
 | Strong | 0.832 | 0.077 | 0.809 | 0.760 | 0.214 | 4/12 |
 | Extreme | 0.799 | 0.109 | 0.773 | 0.727 | 0.183 | 4/12 |
 
-The mean AUROC gap increased at every range, and all 12 paired trajectories had Spearman $\rho=1.0$. The prespecified dose-response criterion therefore passed. However, no range produced the required 10 of 12 coordinate failures: strong and extreme each produced only 4 of 12. The preregistered robust-crossing outcome is consequently **not established**, even though the extreme mean gap exceeded 0.10.
+The mean AUROC gap increased at every range, and all 12 paired trajectories had Spearman $\rho=1.0$. The prespecified dose-response criterion therefore passed. However, no range produced the required 10 of 12 coordinate failures: strong and extreme each produced only 4 of 12. All eight failures were degree-2 CP probes, covering every data/transformation-seed pair at those ranges; no linear or one-hidden-layer MLP probe crossed the rule. The preregistered robust-crossing outcome is consequently **not established**, even though the extreme mean gap exceeded 0.10.
 
 Analytic transport and label-free diagonal estimation matched the reference scores in all 48 comparisons. Their thresholded recovery flag passed 47 of 48 because one mild transformation slightly improved raw AUROC, making a positive-gap recovery fraction undefined. Estimated scales matched every planted coordinate; maximum alignment relative RMSE was $4.81\times10^{-8}$.
 
