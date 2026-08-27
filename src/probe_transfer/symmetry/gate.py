@@ -10,8 +10,9 @@ from probe_transfer.extraction.models import (
     select_last_non_padding,
 )
 from probe_transfer.extraction.runtime import validate_loaded_model
+from probe_transfer.extraction.sites import ActivationCapture, activation_width
 from probe_transfer.symmetry.protocol import selected_models
-from probe_transfer.symmetry.transforms import permute_residual, relative_permutation
+from probe_transfer.symmetry.transforms import apply_symmetry_permutation, relative_permutation
 
 
 @dataclass(frozen=True)
@@ -39,16 +40,23 @@ def run_function_gates(
             layers=model_config["layers"],
             hidden_size=model_config["hidden_size"],
         )
-        reference = _collect_outputs(tokenizer, model, rows, model_config, symmetry)
-        width = model_config["hidden_size"]
+        site = config["activations"].get("site", "residual_stream")
+        reference = _collect_outputs(tokenizer, model, rows, model_config, symmetry, site)
+        width = activation_width(config["activations"], model_config)
+        blocks = tuple(resolve_block_indices(model_config["layers"], symmetry["probed_depths"]))
         current = torch.arange(width)
         targets: list[tuple[str, int | None, torch.Tensor]] = [
             ("identity", None, torch.arange(width)),
             *[("permutation", seed, permutation) for seed, permutation in permutations.items()],
         ]
         for condition, seed, target in targets:
-            permute_residual(model, relative_permutation(current, target))
-            actual = _collect_outputs(tokenizer, model, rows, model_config, symmetry)
+            apply_symmetry_permutation(
+                model,
+                relative_permutation(current, target),
+                symmetry["transformation"],
+                blocks,
+            )
+            actual = _collect_outputs(tokenizer, model, rows, model_config, symmetry, site)
             records.append(
                 _gate_record(
                     model_name,
@@ -58,6 +66,7 @@ def run_function_gates(
                     actual,
                     target,
                     symmetry,
+                    activation_site=site,
                 )
             )
             current = target
@@ -75,6 +84,7 @@ def _collect_outputs(
     rows: list[dict[str, Any]],
     model_config: dict[str, Any],
     symmetry: dict[str, Any],
+    activation_site: str = "residual_stream",
 ) -> GateOutputs:
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -84,28 +94,29 @@ def _collect_outputs(
     hidden_states = {key: [] for key in keys}
     input_device = model.get_input_embeddings().weight.device
 
-    for start in range(0, len(rows), symmetry["gate_batch_size"]):
-        prompts = [row["prompt"] for row in rows[start : start + symmetry["gate_batch_size"]]]
-        encoded = tokenizer(
-            prompts,
-            padding=True,
-            truncation=True,
-            max_length=symmetry["gate_max_length"],
-            return_tensors="pt",
-        )
-        inputs = {name: value.to(input_device) for name, value in encoded.items()}
-        with torch.inference_mode():
-            output = model(
-                **inputs,
-                output_hidden_states=True,
-                use_cache=False,
-                return_dict=True,
+    with ActivationCapture(model, blocks, activation_site) as capture:
+        for start in range(0, len(rows), symmetry["gate_batch_size"]):
+            prompts = [row["prompt"] for row in rows[start : start + symmetry["gate_batch_size"]]]
+            encoded = tokenizer(
+                prompts,
+                padding=True,
+                truncation=True,
+                max_length=symmetry["gate_max_length"],
+                return_tensors="pt",
             )
-        logits.append(select_last_non_padding(output.logits, inputs["attention_mask"]).cpu())
-        for key, block in zip(keys, blocks, strict=True):
-            hidden_states[key].append(
-                select_last_non_padding(output.hidden_states[block], inputs["attention_mask"]).cpu()
-            )
+            inputs = {name: value.to(input_device) for name, value in encoded.items()}
+            capture.clear()
+            with torch.inference_mode():
+                output = model(
+                    **inputs,
+                    output_hidden_states=capture.requires_hidden_states,
+                    use_cache=False,
+                    return_dict=True,
+                )
+            selected = capture.selected(output, inputs["attention_mask"])
+            logits.append(select_last_non_padding(output.logits, inputs["attention_mask"]).cpu())
+            for key, values in zip(keys, selected, strict=True):
+                hidden_states[key].append(values.cpu())
     return GateOutputs(
         logits=torch.cat(logits),
         hidden_states={key: torch.cat(values) for key, values in hidden_states.items()},
@@ -120,6 +131,8 @@ def _gate_record(
     actual: GateOutputs,
     target: torch.Tensor,
     config: dict[str, Any],
+    *,
+    activation_site: str = "residual_stream",
 ) -> dict[str, Any]:
     absolute_errors = torch.abs(reference.logits - actual.logits)
     tolerances = config["logit_atol"] + config["logit_rtol"] * torch.abs(reference.logits)
@@ -147,6 +160,7 @@ def _gate_record(
         "permutation_seed": seed,
         "rows": len(reference.logits),
         "logit_position": "last_non_padding",
+        "activation_site": activation_site,
         "dtype": config["gate_dtype"],
         "maximum_logit_error": logit_error,
         "maximum_scaled_logit_error": scaled_logit_error,

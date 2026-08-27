@@ -10,6 +10,7 @@ from safetensors import safe_open
 from core.constants import ACTIVATION_STAGING_ENV
 from core.tracking import Tracker
 from probe_transfer.atomic import publish_directories
+from probe_transfer.extraction.sites import activation_width
 from probe_transfer.transfer.evaluation import run_transfer
 
 
@@ -79,7 +80,7 @@ def _validate_activations(output_dir: Path, config: dict[str, Any]) -> None:
                     raise ValueError(f"{path} does not contain the expected {rows} rows.")
                 for key in layer_keys:
                     shape = saved.get_slice(key).get_shape()
-                    if shape != [rows, model["hidden_size"]]:
+                    if shape != [rows, activation_width(config["activations"], model)]:
                         raise ValueError(f"Unexpected activation shape for {path}:{key}: {shape}")
 
     if missing:

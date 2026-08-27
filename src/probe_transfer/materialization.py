@@ -27,7 +27,11 @@ def materialize_baseline(
     config: dict[str, Any], destination: Path, models: list[str] | None = None
 ) -> None:
     materials = config["materials"]
-    source = study_prefix(materials["source_name"], materials["source_study"])
+    source = study_prefix(
+        materials["source_name"],
+        materials["source_study"],
+        materials.get("source_variant"),
+    )
     includes = None
     if models is not None:
         includes = [

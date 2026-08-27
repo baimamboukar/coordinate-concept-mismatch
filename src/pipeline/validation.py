@@ -3,6 +3,12 @@ from typing import Any
 from core.config import ConfigError, validate_evaluation
 from core.constants import HF_BUCKET
 from probe_transfer.alignment.materials import direction_groups
+from probe_transfer.extraction.sites import (
+    ACTIVATION_SITES,
+    MLP_INTERMEDIATE,
+    RESIDUAL_STREAM,
+    activation_width,
+)
 from probe_transfer.symmetry.protocol import estimated_alignment_enabled, selected_models
 
 
@@ -48,7 +54,7 @@ def _validate_extraction(config: dict[str, Any]) -> None:
 def _validate_transfer(config: dict[str, Any]) -> None:
     _validate_activation_protocol(config)
     validate_evaluation(config.get("evaluation"))
-    widths = {model["hidden_size"] for model in config["models"].values()}
+    widths = {activation_width(config["activations"], model) for model in config["models"].values()}
     if len(widths) != 1:
         raise ConfigError("Unaligned frozen transfer requires a shared activation width.")
     models = set(config["models"])
@@ -99,8 +105,14 @@ def _validate_alignment(config: dict[str, Any]) -> None:
 def _validate_symmetry(config: dict[str, Any]) -> None:
     validate_evaluation(config.get("evaluation"))
     symmetry = config.get("symmetry", {})
-    if symmetry.get("transformation") != "residual_permutation":
-        raise ConfigError("The symmetry stage requires an explicit residual permutation.")
+    transformation = symmetry.get("transformation")
+    site = config["activations"].get("site", RESIDUAL_STREAM)
+    expected_site = {
+        "residual_permutation": RESIDUAL_STREAM,
+        "mlp_neuron_permutation": MLP_INTERMEDIATE,
+    }.get(transformation)
+    if expected_site is None or site != expected_site:
+        raise ConfigError("The symmetry transformation and activation site are incompatible.")
     models = selected_models(config)
     if not models or len(models) != len(set(models)) or set(models) - set(config["models"]):
         raise ConfigError("Symmetry models must be unique configured model keys.")
@@ -116,17 +128,17 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
         raise ConfigError("Permutation seeds must be unique.")
     if symmetry.get("logit_atol", 0) <= 0 or symmetry.get("logit_rtol", 0) <= 0:
         raise ConfigError("Function-preservation tolerances must be positive.")
-    widths = {config["models"][name]["hidden_size"] for name in models}
+    widths = {activation_width(config["activations"], config["models"][name]) for name in models}
     if widths != {symmetry.get("width")}:
-        raise ConfigError("Every transformed model must match the configured residual width.")
+        raise ConfigError("Every transformed model must match the configured activation width.")
     smoke_rows = symmetry.get("smoke_gate_rows", 0)
     if smoke_rows < 0 or smoke_rows >= symmetry["gate_rows"]:
         raise ConfigError("Symmetry smoke rows must be non-negative and smaller than gate rows.")
     if estimated_alignment_enabled(config):
         settings = symmetry["estimated_alignment"]
         materials = config.get("materials", {})
-        if settings.get("method") != "permutation":
-            raise ConfigError("Known-symmetry estimation currently requires strict permutation.")
+        if settings.get("method") not in {"permutation", "exact_permutation"}:
+            raise ConfigError("Known-symmetry estimation requires strict feature matching.")
         if settings.get("fit_split") != "train" or settings.get("diagnostic_split") != "validation":
             raise ConfigError(
                 "Estimated symmetry alignment requires train fit and validation diagnosis."
@@ -142,6 +154,8 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
 
 def _validate_activation_protocol(config: dict[str, Any]) -> None:
     activations = config["activations"]
+    if activations.get("site", RESIDUAL_STREAM) not in ACTIVATION_SITES:
+        raise ConfigError("The activation site is unsupported.")
     depths = activations.get("normalized_depths", [])
     if not depths or len(depths) != len(set(depths)):
         raise ConfigError("Normalized activation depths must be non-empty and unique.")

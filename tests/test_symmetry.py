@@ -1,4 +1,5 @@
 from copy import deepcopy
+from typing import Any
 
 import torch
 from transformers import (
@@ -15,6 +16,7 @@ from transformers import (
 from probe_transfer.symmetry.transforms import (
     permute_gpt_neox_residual,
     permute_mistral_residual,
+    permute_mlp_neurons,
     permute_residual,
     relative_permutation,
     seeded_permutation,
@@ -155,6 +157,30 @@ def test_qwen_residual_permutation_preserves_function() -> None:
     _assert_llama_family_permutation(tiny_qwen())
 
 
+def test_mlp_neuron_permutation_preserves_logits_and_permutes_site() -> None:
+    torch.manual_seed(29)
+    reference = tiny_mistral().double()
+    transformed = deepcopy(reference)
+    permutation = seeded_permutation(32, 42)
+    input_ids = torch.randint(0, 37, (3, 9))
+
+    expected, expected_site = _mlp_outputs(reference, input_ids, block_index=2)
+    permute_mlp_neurons(transformed, permutation, (2,))
+    actual, actual_site = _mlp_outputs(transformed, input_ids, block_index=2)
+
+    torch.testing.assert_close(actual.logits, expected.logits, rtol=1e-6, atol=1e-7)
+    torch.testing.assert_close(
+        actual_site,
+        expected_site.index_select(-1, permutation),
+        rtol=1e-6,
+        atol=1e-7,
+    )
+    for expected_hidden, actual_hidden in zip(
+        expected.hidden_states, actual.hidden_states, strict=True
+    ):
+        torch.testing.assert_close(actual_hidden, expected_hidden, rtol=1e-6, atol=1e-7)
+
+
 def _assert_llama_family_permutation(model: torch.nn.Module) -> None:
     torch.manual_seed(23)
     reference = model.double()
@@ -177,3 +203,19 @@ def _assert_llama_family_permutation(model: torch.nn.Module) -> None:
             rtol=1e-6,
             atol=1e-7,
         )
+
+
+def _mlp_outputs(model: MistralForCausalLM, input_ids: torch.Tensor, block_index: int):
+    captured = []
+    mlp: Any = model.model.layers[block_index - 1].mlp
+    projection = mlp.down_proj
+    handle = projection.register_forward_pre_hook(
+        lambda _module, inputs: captured.append(inputs[0])
+    )
+    try:
+        with torch.inference_mode():
+            output = model(input_ids, output_hidden_states=True)
+    finally:
+        handle.remove()
+    assert len(captured) == 1
+    return output, captured[0]

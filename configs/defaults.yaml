@@ -24,6 +24,7 @@ sampling:
   protect_test: true
 
 activations:
+  site: residual_stream
   prompt_format: raw
   token_position: last_non_padding
   max_length: 512

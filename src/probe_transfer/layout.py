@@ -6,10 +6,12 @@ SEMANTIC_KEY = re.compile(r"^[a-z0-9]+(?:-[a-z0-9.]+)*$")
 
 
 def activation_prefix(config: dict[str, Any], model_name: str) -> str:
-    return (
+    prefix = (
         f"activations/{_key(config['artifacts']['dataset_key'])}/"
         f"{model_artifact_key(config, model_name)}"
     )
+    variant = config.get("activations", {}).get("artifact_key")
+    return prefix if variant is None else f"{prefix}/{_key(variant)}"
 
 
 def model_artifact_key(config: dict[str, Any], model_name: str) -> str:

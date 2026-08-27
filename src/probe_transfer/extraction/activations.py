@@ -7,7 +7,8 @@ import torch
 from safetensors import safe_open
 from safetensors.torch import save_file
 
-from probe_transfer.extraction.models import resolve_block_indices, select_last_non_padding
+from probe_transfer.extraction.models import resolve_block_indices
+from probe_transfer.extraction.sites import RESIDUAL_STREAM, ActivationCapture
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ def extract_activation_tensors(
     normalized_depths: list[float],
     max_length: int,
     batch_size: int,
+    activation_site: str = RESIDUAL_STREAM,
     storage_dtype: torch.dtype = torch.bfloat16,
 ) -> tuple[dict[str, torch.Tensor], ActivationStats]:
     if not rows:
@@ -55,41 +57,38 @@ def extract_activation_tensors(
 
     input_device = model.get_input_embeddings().weight.device
     truncated_rows = 0
-    for start in range(0, len(rows), batch_size):
-        stop = min(start + batch_size, len(rows))
-        prompts = [row["prompt"] for row in rows[start:stop]]
-        lengths = _token_lengths(tokenizer, prompts)
-        truncated_rows += sum(length > max_length for length in lengths)
-        encoded = tokenizer(
-            prompts,
-            padding=True,
-            truncation=True,
-            max_length=max_length,
-            return_tensors="pt",
-        )
-        model_inputs = {name: value.to(input_device) for name, value in encoded.items()}
-        with torch.inference_mode():
-            outputs = model(
-                **model_inputs,
-                output_hidden_states=True,
-                use_cache=False,
-                return_dict=True,
+    with ActivationCapture(model, block_indices, activation_site) as capture:
+        for start in range(0, len(rows), batch_size):
+            stop = min(start + batch_size, len(rows))
+            prompts = [row["prompt"] for row in rows[start:stop]]
+            lengths = _token_lengths(tokenizer, prompts)
+            truncated_rows += sum(length > max_length for length in lengths)
+            encoded = tokenizer(
+                prompts,
+                padding=True,
+                truncation=True,
+                max_length=max_length,
+                return_tensors="pt",
             )
-        hidden_states = outputs.hidden_states
-        if hidden_states is None or len(hidden_states) != num_layers + 1:
-            actual = 0 if hidden_states is None else len(hidden_states)
-            raise ValueError(f"Expected {num_layers + 1} hidden states, received {actual}.")
-
-        for key, block_index in zip(layer_keys, block_indices, strict=True):
-            selected = select_last_non_padding(
-                hidden_states[block_index], model_inputs["attention_mask"]
-            )
-            if selected.shape != (stop - start, hidden_size):
-                raise ValueError(
-                    f"Block {block_index} produced {tuple(selected.shape)}, expected "
-                    f"{(stop - start, hidden_size)}."
+            model_inputs = {name: value.to(input_device) for name, value in encoded.items()}
+            capture.clear()
+            with torch.inference_mode():
+                outputs = model(
+                    **model_inputs,
+                    output_hidden_states=capture.requires_hidden_states,
+                    use_cache=False,
+                    return_dict=True,
                 )
-            tensors[key][start:stop].copy_(selected.to(device="cpu", dtype=storage_dtype))
+            selected_states = capture.selected(outputs, model_inputs["attention_mask"])
+            for key, block_index, selected in zip(
+                layer_keys, block_indices, selected_states, strict=True
+            ):
+                if selected.shape != (stop - start, hidden_size):
+                    raise ValueError(
+                        f"Block {block_index} produced {tuple(selected.shape)}, expected "
+                        f"{(stop - start, hidden_size)}."
+                    )
+                tensors[key][start:stop].copy_(selected.to(device="cpu", dtype=storage_dtype))
 
     finite = all(
         torch.isfinite(tensor).all() for key, tensor in tensors.items() if key.startswith("layer_")

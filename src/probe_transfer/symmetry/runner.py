@@ -72,6 +72,25 @@ def run_symmetry_experiment(config: dict[str, Any], tracker: Tracker) -> None:
         primary = [row for row in recoveries if row["depth"] == symmetry["primary_depth"]]
         exact = sum(row["exact_recovery"] for row in primary)
         estimated = sum(row.get("estimated_recovery", False) for row in primary)
+        tracker.metrics(
+            {
+                "symmetry/primary_comparisons": float(len(primary)),
+                "symmetry/coordinate_failure_fraction": sum(
+                    bool(row["coordinate_failure"]) for row in primary
+                )
+                / len(primary),
+                "symmetry/mean_raw_auroc_gap": sum(float(row["raw_auroc_gap"]) for row in primary)
+                / len(primary),
+                "symmetry/exact_recovery_fraction": exact / len(primary),
+                "symmetry/estimated_recovery_fraction": estimated / len(primary),
+                "symmetry/maximum_logit_error": max(
+                    float(gate["maximum_logit_error"]) for gate in gates
+                ),
+                "symmetry/maximum_activation_relative_error": max(
+                    float(gate["maximum_activation_relative_error"]) for gate in gates
+                ),
+            }
+        )
         tracker.report(
             "Summary",
             f"All {len(gates)} function-preservation gates passed. Analytic transport recovered "

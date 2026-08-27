@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 from torch import nn
+from transformers import MistralConfig, MistralForCausalLM
 
 from probe_transfer.extraction.activations import (
     assert_repeatable,
@@ -103,6 +104,41 @@ def test_saved_file_and_repeatability_are_verified(tmp_path: Path) -> None:
     assert activations.shape == (2, 3)
     assert row_ids.tolist() == [1, 2]
     assert labels.tolist() == [0, 1]
+
+
+def test_extracts_mlp_intermediate_activations() -> None:
+    model = MistralForCausalLM(
+        MistralConfig(
+            hidden_size=8,
+            intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            vocab_size=32,
+            attention_dropout=0.0,
+        )
+    ).eval()
+    rows = [
+        {"row_id": 1, "prompt": "one two", "label": 0},
+        {"row_id": 2, "prompt": "one two three", "label": 1},
+    ]
+
+    tensors, stats = extract_activation_tensors(
+        rows,
+        FakeTokenizer(),
+        model,
+        num_layers=2,
+        hidden_size=16,
+        normalized_depths=[0.5],
+        max_length=4,
+        batch_size=2,
+        activation_site="mlp_intermediate",
+    )
+
+    assert stats.block_indices == (1,)
+    assert tensors["layer_50"].shape == (2, 16)
+    assert torch.isfinite(tensors["layer_50"]).all()
 
 
 def test_bucket_uri_rejects_unsafe_paths() -> None:

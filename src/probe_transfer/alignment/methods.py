@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from hashlib import blake2b
 
 import numpy as np
 import torch
@@ -86,6 +87,51 @@ def fit_permutation_alignment(
 ) -> AlignmentMap:
     source_values, target_values = _paired_tensors(source, target, device)
     return _fit_permutation(source_values, target_values)
+
+
+def fit_exact_permutation_alignment(source: np.ndarray, target: np.ndarray) -> AlignmentMap:
+    """Recover an exact feature permutation from paired, label-free activations."""
+    source_values = np.asarray(source)
+    target_values = np.asarray(target)
+    if (
+        source_values.ndim != 2
+        or source_values.shape != target_values.shape
+        or len(source_values) < 2
+    ):
+        raise ValueError("Alignment requires paired two-dimensional arrays of equal shape.")
+
+    target_signatures: dict[bytes, list[int]] = {}
+    for index in range(target_values.shape[1]):
+        signature = _column_signature(target_values[:, index])
+        target_signatures.setdefault(signature, []).append(index)
+
+    indices = []
+    for source_index in range(source_values.shape[1]):
+        signature = _column_signature(source_values[:, source_index])
+        candidates = target_signatures.get(signature, [])
+        match = next(
+            (
+                index
+                for index in candidates
+                if np.array_equal(source_values[:, source_index], target_values[:, index])
+            ),
+            None,
+        )
+        if match is None:
+            raise ValueError("Paired activations are not related by an exact feature permutation.")
+        candidates.remove(match)
+        indices.append(match)
+
+    if any(target_signatures.values()):
+        raise ValueError("Exact activation matching did not produce a bijection.")
+    return AlignmentMap(
+        "exact_permutation",
+        indices=torch.tensor(indices, dtype=torch.int64),
+        metadata={
+            "matched_correlation_mean": 1.0,
+            "matched_correlation_minimum": 1.0,
+        },
+    )
 
 
 def fit_affine_ridge(
@@ -189,6 +235,11 @@ def _correlation_metadata(values: torch.Tensor) -> dict[str, float]:
         "matched_correlation_mean": float(values.mean().item()),
         "matched_correlation_minimum": float(values.min().item()),
     }
+
+
+def _column_signature(values: np.ndarray) -> bytes:
+    contiguous = np.ascontiguousarray(values)
+    return blake2b(contiguous.tobytes(), digest_size=16).digest()
 
 
 def _map_device(alignment: AlignmentMap) -> torch.device:

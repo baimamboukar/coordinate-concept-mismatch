@@ -24,6 +24,7 @@ from probe_transfer.extraction.runtime import (
     validate_free_disk,
     validate_loaded_model,
 )
+from probe_transfer.extraction.sites import activation_boundary, activation_width
 from probe_transfer.extraction.types import JobCompletion, PreparedSplit, SplitCompletion
 
 MODEL_ENV = "EXTRACTION_MODEL"
@@ -189,8 +190,10 @@ def _validate_settings(config: Mapping[str, Any], splits: tuple[PreparedSplit, .
     if not config.get("data_seeds"):
         raise ValueError("Full extraction requires at least one data seed.")
     depths = activations["normalized_depths"]
-    if len(depths) != 4 or len(set(depths)) != 4:
-        raise ValueError("Full extraction requires four unique normalized depths.")
+    if not depths or len(depths) != len(set(depths)):
+        raise ValueError("Full extraction requires non-empty unique normalized depths.")
+    if activations.get("primary_depth") is not None and activations["primary_depth"] not in depths:
+        raise ValueError("The primary activation depth must be extracted.")
     if activations.get("prompt_format") != "raw" or activations.get("token_position") != (
         "last_non_padding"
     ):
@@ -220,10 +223,11 @@ def extract_rows(
         tokenizer,
         model,
         num_layers=model_config["layers"],
-        hidden_size=model_config["hidden_size"],
+        hidden_size=activation_width(dict(activations), dict(model_config)),
         normalized_depths=activations["normalized_depths"],
         max_length=activations["max_length"],
         batch_size=activations["batch_size"],
+        activation_site=activations.get("site", "residual_stream"),
         storage_dtype=storage_dtype,
     )
 
@@ -280,5 +284,5 @@ def _metadata(
         "normalized_depths": json.dumps(activations["normalized_depths"]),
         "max_length": str(activations["max_length"]),
         "token_position": "last_non_padding",
-        "activation_boundary": "transformers_output_hidden_states",
+        "activation_boundary": activation_boundary(activations.get("site", "residual_stream")),
     }

@@ -38,3 +38,29 @@ def test_modern_symmetry_protocol_is_model_scoped_and_derived() -> None:
         "function_smoke_gate_rows": 9,
         "alignment_diagnostic_rows": 12,
     }
+
+
+def test_mlp_neuron_symmetry_protocol_is_site_aware_and_derived() -> None:
+    study = load_config(CONFIGS_DIR / "studies" / "modern_mlp_neuron_symmetry.yaml")
+    transfer = materialize_stage(study, "transfer")
+    symmetry = materialize_stage(study, "symmetry")
+
+    assert transfer["activations"]["site"] == "mlp_intermediate"
+    assert transfer["expected_outputs"] == {
+        "metrics_rows": 6,
+        "prediction_rows": 10194,
+        "transfer_gap_rows": 0,
+        "probe_bundles": 2,
+    }
+    assert symmetry["symmetry"]["transformation"] == "mlp_neuron_permutation"
+    assert symmetry["symmetry"]["width"] == 14336
+    assert symmetry["symmetry"]["estimated_alignment"]["method"] == "exact_permutation"
+    assert symmetry["expected_outputs"] == {
+        "metrics_rows": 60,
+        "prediction_rows": 101940,
+        "recovery_rows": 12,
+        "function_gate_rows": 3,
+        "probe_bundles": 4,
+        "function_smoke_gate_rows": 3,
+        "alignment_diagnostic_rows": 4,
+    }

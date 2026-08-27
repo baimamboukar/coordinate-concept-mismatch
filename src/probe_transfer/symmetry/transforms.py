@@ -111,6 +111,46 @@ def permute_residual(model: Any, permutation: torch.Tensor) -> None:
         raise TypeError(f"Unsupported residual-permutation architecture: {model_type}")
 
 
+def permute_mlp_neurons(
+    model: Any, permutation: torch.Tensor, block_indices: tuple[int, ...]
+) -> None:
+    """Permute SwiGLU intermediate neurons in selected blocks without changing logits."""
+    validate_permutation(permutation)
+    model_type = getattr(getattr(model, "config", None), "model_type", None)
+    backbone = getattr(model, "model", None)
+    layers = getattr(backbone, "layers", None)
+    if model_type not in {"llama", "mistral", "qwen3"} or layers is None:
+        raise TypeError(f"Unsupported MLP-neuron permutation architecture: {model_type}")
+    if not block_indices or len(block_indices) != len(set(block_indices)):
+        raise ValueError("MLP-neuron permutation requires unique selected blocks.")
+
+    with torch.no_grad():
+        for block_index in block_indices:
+            if block_index < 1 or block_index > len(layers):
+                raise ValueError(f"Invalid MLP block index: {block_index}")
+            mlp = layers[block_index - 1].mlp
+            width = mlp.gate_proj.weight.shape[0]
+            if len(permutation) != width or mlp.up_proj.weight.shape[0] != width:
+                raise ValueError(f"Expected a width-{width} MLP-neuron permutation.")
+            _permute_output(mlp.gate_proj, permutation)
+            _permute_output(mlp.up_proj, permutation)
+            _permute_parameter(mlp.down_proj.weight, permutation, dim=1)
+
+
+def apply_symmetry_permutation(
+    model: Any,
+    permutation: torch.Tensor,
+    transformation: str,
+    block_indices: tuple[int, ...],
+) -> None:
+    if transformation == "residual_permutation":
+        permute_residual(model, permutation)
+    elif transformation == "mlp_neuron_permutation":
+        permute_mlp_neurons(model, permutation, block_indices)
+    else:
+        raise ValueError(f"Unsupported symmetry transformation: {transformation}")
+
+
 def _permute_output(module: Any, permutation: torch.Tensor) -> None:
     _permute_parameter(module.weight, permutation, dim=0)
     if module.bias is not None:

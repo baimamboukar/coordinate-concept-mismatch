@@ -64,3 +64,29 @@ def test_symmetry_materializes_only_selected_model(tmp_path: Path, monkeypatch) 
     assert "seed_137/mistral.safetensors" in probe_command
     assert all("llama-3.1-8b-instruct" not in " ".join(command) for command, _ in calls)
     assert any("mistral-7b-v0.3" in " ".join(command) for command, _ in calls)
+
+
+def test_site_specific_baseline_uses_variant_paths(tmp_path: Path, monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr("probe_transfer.materialization.shutil.which", lambda _name: "/usr/bin/hf")
+    monkeypatch.setattr(
+        "probe_transfer.materialization.subprocess.run",
+        lambda command, **kwargs: calls.append(command),
+    )
+    config = {
+        "artifacts": {"bucket": "test/project", "dataset_key": "wildguardmix-v1"},
+        "activations": {"artifact_key": "mlp-intermediate"},
+        "data_seeds": [42, 137],
+        "materials": {
+            "source_name": "modern_mlp_neuron_permutation_probe_transport",
+            "source_study": "modern_mlp_neuron_symmetry",
+            "source_variant": "baseline",
+        },
+        "models": {"mistral": {"artifact_key": "mistral-7b-v0.3"}},
+    }
+
+    materialize_baseline(config, tmp_path, models=["mistral"])
+
+    commands = [" ".join(command) for command in calls]
+    assert any("modern-mlp-neuron-symmetry/baseline/probes" in command for command in commands)
+    assert any("mistral-7b-v0.3/mlp-intermediate" in command for command in commands)

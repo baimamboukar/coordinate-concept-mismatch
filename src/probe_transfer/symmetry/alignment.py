@@ -8,6 +8,7 @@ from probe_transfer.alignment.materials import layer_key, resolve_device
 from probe_transfer.alignment.methods import (
     AlignmentMap,
     alignment_diagnostic,
+    fit_exact_permutation_alignment,
     fit_permutation_alignment,
 )
 from probe_transfer.extraction.activations import load_activation_split
@@ -49,11 +50,15 @@ def estimate_permutation_maps(
                 source_fit = train[:fit_rows]
                 for permutation_seed, permutation in permutations.items():
                     index = permutation.numpy()
-                    fitted = fit_permutation_alignment(
-                        source_fit,
-                        source_fit[:, index],
-                        device=device,
-                    )
+                    target_fit = source_fit[:, index]
+                    if settings["method"] == "exact_permutation":
+                        fitted = fit_exact_permutation_alignment(source_fit, target_fit)
+                    else:
+                        fitted = fit_permutation_alignment(
+                            source_fit,
+                            target_fit,
+                            device=device,
+                        )
                     key = (data_seed, model, depth, permutation_seed)
                     maps[key] = fitted
                     diagnostics.append(
