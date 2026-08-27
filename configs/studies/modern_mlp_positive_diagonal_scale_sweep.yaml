@@ -1,0 +1,105 @@
+extends: ../defaults.yaml
+name: modern_mlp_positive_diagonal_scale_sweep
+
+models:
+  mistral:
+    backend: huggingface
+    id: mistralai/Mistral-7B-v0.3
+    revision: caa1feb0e54d415e2df31207e5f4e273e33509b1
+    artifact_key: mistral-7b-v0.3
+    layers: 32
+    hidden_size: 4096
+    intermediate_size: 14336
+    role: exact_symmetry_control
+
+activations:
+  site: mlp_intermediate
+  artifact_key: mlp-intermediate
+  dtype: bfloat16
+  storage_dtype: bfloat16
+  batch_size: 4
+  normalized_depths: [0.75]
+  primary_depth: 0.75
+
+extraction:
+  models: [mistral]
+
+execution:
+  accelerators: [H200]
+  minimum_gpu_memory_gb: 120
+
+tracking:
+  wandb: true
+  mode: offline
+  local_report: false
+
+pipeline:
+  stages:
+    preflight:
+      name: positive_diagonal_scale_sweep
+      tracking: {wandb: false, local_report: false}
+    symmetry:
+      name: positive_diagonal_scale_sweep
+      materials:
+        source_name: modern_mlp_neuron_permutation_probe_transport
+        source_study: modern_mlp_neuron_symmetry
+        source_variant: baseline
+        expected_train_rows: 12000
+        expected_validation_rows: 2000
+        expected_test_rows: 1699
+      symmetry:
+        transformation: mlp_positive_diagonal
+        models: [mistral]
+        width: 14336
+        transformation_seeds: [42, 137]
+        scale_ranges:
+          mild: [0.5, 2.0]
+          moderate: [0.125, 8.0]
+          strong: [0.03125, 32.0]
+          extreme: [0.0078125, 128.0]
+        dose_response:
+          ordered_variants: [mild, moderate, strong, extreme]
+          minimum_trajectory_spearman: 0.8
+          minimum_monotonic_trajectories: 10
+          minimum_failure_comparisons: 10
+        probed_depths: [0.75]
+        primary_depth: 0.75
+        gate_rows: 1699
+        smoke_gate_rows: 8
+        gate_batch_size: 2
+        gate_max_length: 512
+        gate_dtype: float64
+        logit_atol: 0.00003
+        logit_rtol: 0.00001
+        activation_relative_tolerance: 0.00001
+        estimated_alignment:
+          enabled: true
+          method: positive_diagonal
+          fit_split: train
+          diagnostic_split: validation
+          fit_rows: 2000
+          fit_relative_tolerance: 0.000001
+          scale_match_rtol: 0.00001
+          device: cpu
+      evaluation:
+        primary_metrics:
+          - raw_auroc_gap_by_scale_range
+          - dose_response_supported
+          - first_robust_failure_range
+          - recovery_fraction
+          - estimated_recovery_fraction
+        additional_metrics:
+          - auroc
+          - threshold_transfer
+          - score_agreement
+          - alignment_relative_rmse
+          - alignment_mean_cosine
+          - scale_match_fraction
+          - maximum_scale_relative_error
+        oracle_gate: 0.75
+        minimum_gap: 0.10
+        minimum_recovery: 0.95
+        auroc_recovery_atol: 0.01
+        score_atol: 0.0001
+        score_rtol: 0.00001
+        reference_auroc_atol: 0.00001

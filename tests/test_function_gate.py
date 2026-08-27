@@ -1,6 +1,7 @@
 import pytest
 import torch
 
+from probe_transfer.symmetry.cases import TransformationCase
 from probe_transfer.symmetry.coordinates import CoordinateTransform
 from probe_transfer.symmetry.gate import GateOutputs, _gate_record
 from probe_transfer.symmetry.runner import _require_gate_pass
@@ -19,7 +20,7 @@ def test_function_gate_uses_combined_logit_tolerance() -> None:
     record = _gate_record(
         "model",
         "permutation",
-        42,
+        TransformationCase(42, CoordinateTransform.identity("permutation", 2)),
         reference,
         actual,
         CoordinateTransform.identity("permutation", 2),

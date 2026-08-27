@@ -1,6 +1,10 @@
 from typing import Any
 
-from probe_transfer.symmetry.protocol import estimated_alignment_enabled, selected_models
+from probe_transfer.symmetry.protocol import (
+    estimated_alignment_enabled,
+    selected_models,
+    transformation_count,
+)
 
 
 def expected_outputs(stage: str, config: dict[str, Any]) -> dict[str, int] | None:
@@ -81,7 +85,7 @@ def _symmetry(config: dict[str, Any]) -> dict[str, int]:
         symmetry["probed_depths"],
         symmetry["primary_depth"],
     )
-    transformations = len(symmetry["transformation_seeds"])
+    transformations = transformation_count(config)
     comparisons = seeds * models * family_depths
     estimated = estimated_alignment_enabled(config)
     conditions = 2 + (3 + int(estimated)) * transformations

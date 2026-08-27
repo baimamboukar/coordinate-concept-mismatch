@@ -11,6 +11,7 @@ from probe_transfer.extraction.models import (
 )
 from probe_transfer.extraction.runtime import validate_loaded_model
 from probe_transfer.extraction.sites import ActivationCapture, activation_width
+from probe_transfer.symmetry.cases import TransformationCase
 from probe_transfer.symmetry.coordinates import CoordinateTransform
 from probe_transfer.symmetry.protocol import selected_models
 from probe_transfer.symmetry.transforms import apply_symmetry_transform
@@ -25,7 +26,7 @@ class GateOutputs:
 def run_function_gates(
     config: dict[str, Any],
     rows: list[dict[str, Any]],
-    transformations: dict[int, CoordinateTransform],
+    cases: tuple[TransformationCase, ...],
 ) -> list[dict[str, Any]]:
     symmetry = config["symmetry"]
     records = []
@@ -45,13 +46,13 @@ def run_function_gates(
         reference = _collect_outputs(tokenizer, model, rows, model_config, symmetry, site)
         width = activation_width(config["activations"], model_config)
         blocks = tuple(resolve_block_indices(model_config["layers"], symmetry["probed_depths"]))
-        kind = next(iter(transformations.values())).kind
+        kind = cases[0].coordinates.kind
         current = CoordinateTransform.identity(kind, width)
         targets = [
             ("identity", None, current),
-            *[("transformation", seed, item) for seed, item in transformations.items()],
+            *[("transformation", case, case.coordinates) for case in cases],
         ]
-        for condition, seed, target in targets:
+        for condition, case, target in targets:
             apply_symmetry_transform(
                 model,
                 target.relative_from(current),
@@ -63,7 +64,7 @@ def run_function_gates(
                 _gate_record(
                     model_name,
                     condition,
-                    seed,
+                    case,
                     reference,
                     actual,
                     target,
@@ -128,7 +129,7 @@ def _collect_outputs(
 def _gate_record(
     model: str,
     condition: str,
-    seed: int | None,
+    case: TransformationCase | None,
     reference: GateOutputs,
     actual: GateOutputs,
     target: CoordinateTransform,
@@ -160,7 +161,7 @@ def _gate_record(
         "model": model,
         "condition": condition,
         "transformation": config["transformation"],
-        "transformation_seed": seed,
+        **({"transformation_seed": None} if case is None else case.fields()),
         "rows": len(reference.logits),
         "logit_position": "last_non_padding",
         "activation_site": activation_site,

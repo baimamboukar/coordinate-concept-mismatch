@@ -4,11 +4,12 @@ import numpy as np
 from sklearn.metrics import roc_auc_score
 
 from probe_transfer.probes.evaluation import paired_auroc_gap_interval
+from probe_transfer.symmetry.cases import TransformationCase
 
 
 def recovery_record(
     context: dict[str, Any],
-    transformation_seed: int,
+    case: TransformationCase,
     labels: np.ndarray,
     reference: np.ndarray,
     raw: np.ndarray,
@@ -55,7 +56,7 @@ def recovery_record(
     )
     record = {
         **context,
-        "transformation_seed": transformation_seed,
+        **case.fields(),
         "reference_auroc": reference_auroc,
         "raw_auroc": raw_auroc,
         "transported_auroc": transported_auroc,

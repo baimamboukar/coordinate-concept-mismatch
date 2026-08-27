@@ -1,3 +1,5 @@
+import re
+from itertools import pairwise
 from typing import Any
 
 from core.config import ConfigError, validate_evaluation
@@ -11,6 +13,8 @@ from probe_transfer.extraction.sites import (
     activation_width,
 )
 from probe_transfer.symmetry.protocol import estimated_alignment_enabled, selected_models
+
+SCALE_VARIANT = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 def validate_stage(config: dict[str, Any]) -> None:
@@ -138,7 +142,7 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
     if transformation == "attention_head_permutation":
         _validate_attention_layout(config, models)
     elif transformation == "mlp_positive_diagonal":
-        _validate_positive_diagonal(symmetry)
+        _validate_positive_diagonal(config)
     smoke_rows = symmetry.get("smoke_gate_rows", 0)
     if smoke_rows < 0 or smoke_rows >= symmetry["gate_rows"]:
         raise ConfigError("Symmetry smoke rows must be non-negative and smaller than gate rows.")
@@ -165,8 +169,41 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
             raise ConfigError("Estimated alignment device must be cpu, cuda, or auto.")
 
 
-def _validate_positive_diagonal(symmetry: dict[str, Any]) -> None:
+def _validate_positive_diagonal(config: dict[str, Any]) -> None:
+    symmetry = config["symmetry"]
     scale_range = symmetry.get("scale_range")
+    scale_ranges = symmetry.get("scale_ranges")
+    if (scale_range is None) == (scale_ranges is None):
+        raise ConfigError("Configure exactly one positive-diagonal scale range or range sweep.")
+    if scale_ranges is not None:
+        if (
+            not isinstance(scale_ranges, dict)
+            or len(scale_ranges) < 2
+            or any(
+                not isinstance(name, str) or not SCALE_VARIANT.fullmatch(name)
+                for name in scale_ranges
+            )
+        ):
+            raise ConfigError("Scale sweeps require at least two semantic lowercase variants.")
+        ranges = list(scale_ranges.values())
+    else:
+        ranges = [scale_range]
+    for values in ranges:
+        _validate_reciprocal_range(values)
+    if scale_ranges is not None:
+        maxima = [values[1] for values in ranges]
+        if any(after <= before for before, after in pairwise(maxima)):
+            raise ConfigError("Scale sweep ranges must increase in configured order.")
+        _validate_dose_response(config, list(scale_ranges))
+    elif symmetry.get("dose_response") is not None:
+        raise ConfigError("Dose-response settings require a positive-diagonal scale sweep.")
+
+    settings = symmetry.get("estimated_alignment", {})
+    if settings.get("fit_relative_tolerance", 0) <= 0 or settings.get("scale_match_rtol", 0) <= 0:
+        raise ConfigError("Positive-diagonal estimation tolerances must be positive.")
+
+
+def _validate_reciprocal_range(scale_range: Any) -> None:
     if (
         not isinstance(scale_range, list)
         or len(scale_range) != 2
@@ -176,9 +213,32 @@ def _validate_positive_diagonal(symmetry: dict[str, Any]) -> None:
     minimum, maximum = scale_range
     if minimum <= 0 or minimum >= 1 or maximum <= 1 or abs(minimum * maximum - 1) > 1e-12:
         raise ConfigError("Positive-diagonal scales must use a reciprocal range around one.")
-    settings = symmetry.get("estimated_alignment", {})
-    if settings.get("fit_relative_tolerance", 0) <= 0 or settings.get("scale_match_rtol", 0) <= 0:
-        raise ConfigError("Positive-diagonal estimation tolerances must be positive.")
+
+
+def _validate_dose_response(config: dict[str, Any], variants: list[str]) -> None:
+    settings = config["symmetry"].get("dose_response")
+    if not isinstance(settings, dict) or settings.get("ordered_variants") != variants:
+        raise ConfigError("Dose-response variants must exactly match the configured range order.")
+    minimum_rho = settings.get("minimum_trajectory_spearman")
+    if not isinstance(minimum_rho, (int, float)) or isinstance(minimum_rho, bool):
+        raise ConfigError(
+            "The minimum trajectory Spearman correlation must be between zero and one."
+        )
+    if not 0 <= minimum_rho <= 1:
+        raise ConfigError(
+            "The minimum trajectory Spearman correlation must be between zero and one."
+        )
+    primary = len(config["probes"]["primary_families"])
+    comparisons = (
+        len(config["data_seeds"])
+        * len(selected_models(config))
+        * len(config["symmetry"]["transformation_seeds"])
+        * primary
+    )
+    for key in ("minimum_monotonic_trajectories", "minimum_failure_comparisons"):
+        value = settings.get(key)
+        if type(value) is not int or not 1 <= value <= comparisons:
+            raise ConfigError(f"{key} must be an integer between one and {comparisons}.")
 
 
 def _validate_attention_layout(config: dict[str, Any], models: list[str]) -> None:

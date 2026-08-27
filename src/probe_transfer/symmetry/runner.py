@@ -12,15 +12,11 @@ from probe_transfer.atomic import publish_directories
 from probe_transfer.data import load_prepared_rows
 from probe_transfer.extraction.runtime import validate_cuda_runtime, validate_free_disk
 from probe_transfer.symmetry.alignment import estimate_transformation_maps
-from probe_transfer.symmetry.coordinates import CoordinateTransform
+from probe_transfer.symmetry.cases import build_transformation_cases
 from probe_transfer.symmetry.evaluation import evaluate_transformations
 from probe_transfer.symmetry.gate import run_function_gates
 from probe_transfer.symmetry.protocol import estimated_alignment_enabled
-from probe_transfer.symmetry.scales import seeded_positive_diagonal
-from probe_transfer.symmetry.transforms import (
-    seeded_gqa_head_permutation,
-    seeded_permutation,
-)
+from probe_transfer.symmetry.sweep import scale_sweep_metrics
 
 
 def run_symmetry_experiment(config: dict[str, Any], tracker: Tracker) -> None:
@@ -38,28 +34,28 @@ def run_symmetry_experiment(config: dict[str, Any], tracker: Tracker) -> None:
         "Runtime",
         f"{runtime['gpu']} with {runtime['memory_gb']:.1f} GiB; {free_disk:.1f} GiB free.",
     )
-    transformations = _seeded_transformations(symmetry)
+    cases = build_transformation_cases(symmetry)
     rows = load_prepared_rows(
         prepared / "test.jsonl", config["materials"]["expected_test_rows"], require_balanced=False
     )
     with TemporaryDirectory(prefix=".symmetry-", dir=output) as temporary:
         staging = Path(temporary)
-        prototype = next(iter(transformations.values()))
+        prototype = cases[0].coordinates
         write_json(
             staging / "results" / prototype.map_filename,
-            {str(seed): item.values.tolist() for seed, item in transformations.items()},
+            {case.map_key: case.coordinates.values.tolist() for case in cases},
         )
         smoke_rows = symmetry.get("smoke_gate_rows", 0)
         if smoke_rows:
-            smoke = run_function_gates(config, rows[:smoke_rows], transformations)
+            smoke = run_function_gates(config, rows[:smoke_rows], cases)
             write_jsonl(staging / "results" / "function_gate_smoke.jsonl", smoke)
             _require_gate_pass(smoke, "fail-fast", output)
 
-        gates = run_function_gates(config, rows, transformations)
+        gates = run_function_gates(config, rows, cases)
         write_jsonl(staging / "results" / "function_gates.jsonl", gates)
         _require_gate_pass(gates, "full-test", output)
 
-        maps, diagnostics = estimate_transformation_maps(baseline, config, transformations)
+        maps, diagnostics = estimate_transformation_maps(baseline, config, cases)
         if estimated_alignment_enabled(config):
             write_jsonl(
                 staging / "results" / "alignment_diagnostics.jsonl",
@@ -69,32 +65,32 @@ def run_symmetry_experiment(config: dict[str, Any], tracker: Tracker) -> None:
             baseline,
             staging,
             config,
-            transformations,
+            cases,
             estimated_maps=maps,
         )
         _validate_outputs(staging, config)
         primary = [row for row in recoveries if row["depth"] == symmetry["primary_depth"]]
         exact = sum(row["exact_recovery"] for row in primary)
         estimated = sum(row.get("estimated_recovery", False) for row in primary)
-        tracker.metrics(
-            {
-                "symmetry/primary_comparisons": float(len(primary)),
-                "symmetry/coordinate_failure_fraction": sum(
-                    bool(row["coordinate_failure"]) for row in primary
-                )
-                / len(primary),
-                "symmetry/mean_raw_auroc_gap": sum(float(row["raw_auroc_gap"]) for row in primary)
-                / len(primary),
-                "symmetry/exact_recovery_fraction": exact / len(primary),
-                "symmetry/estimated_recovery_fraction": estimated / len(primary),
-                "symmetry/maximum_logit_error": max(
-                    float(gate["maximum_logit_error"]) for gate in gates
-                ),
-                "symmetry/maximum_activation_relative_error": max(
-                    float(gate["maximum_activation_relative_error"]) for gate in gates
-                ),
-            }
-        )
+        summary_metrics = {
+            "symmetry/primary_comparisons": float(len(primary)),
+            "symmetry/coordinate_failure_fraction": sum(
+                bool(row["coordinate_failure"]) for row in primary
+            )
+            / len(primary),
+            "symmetry/mean_raw_auroc_gap": sum(float(row["raw_auroc_gap"]) for row in primary)
+            / len(primary),
+            "symmetry/exact_recovery_fraction": exact / len(primary),
+            "symmetry/estimated_recovery_fraction": estimated / len(primary),
+            "symmetry/maximum_logit_error": max(
+                float(gate["maximum_logit_error"]) for gate in gates
+            ),
+            "symmetry/maximum_activation_relative_error": max(
+                float(gate["maximum_activation_relative_error"]) for gate in gates
+            ),
+        }
+        summary_metrics.update(scale_sweep_metrics(primary, symmetry))
+        tracker.metrics(summary_metrics)
         tracker.report(
             "Summary",
             f"All {len(gates)} function-preservation gates passed. Analytic transport recovered "
@@ -109,6 +105,7 @@ def _require_gate_pass(gates: list[dict[str, Any]], phase: str, output: Path) ->
     if failed:
         write_jsonl(output / "diagnostics" / f"{phase}_function_gates.jsonl", gates)
         details = "; ".join(
+            f"case={gate.get('transformation_variant') or gate['transformation_seed']} "
             f"seed={gate['transformation_seed']} logits={gate['maximum_logit_error']:.3e} "
             f"activations={gate['maximum_activation_relative_error']:.3e} "
             f"agreement={gate['next_token_agreement']:.6f}"
@@ -161,34 +158,3 @@ def _required_directory(name: str, *, create: bool = False) -> Path:
     elif not path.is_dir():
         raise FileNotFoundError(f"Directory not found: {path}")
     return path
-
-
-def _seeded_transformations(symmetry: dict[str, Any]) -> dict[int, CoordinateTransform]:
-    seeds = symmetry["transformation_seeds"]
-    if symmetry["transformation"] == "mlp_positive_diagonal":
-        minimum, maximum = symmetry["scale_range"]
-        return {
-            seed: CoordinateTransform(
-                "positive_diagonal",
-                seeded_positive_diagonal(symmetry["width"], seed, minimum, maximum),
-            )
-            for seed in seeds
-        }
-    if symmetry["transformation"] != "attention_head_permutation":
-        return {
-            seed: CoordinateTransform("permutation", seeded_permutation(symmetry["width"], seed))
-            for seed in seeds
-        }
-    layout = symmetry["attention_layout"]
-    return {
-        seed: CoordinateTransform(
-            "permutation",
-            seeded_gqa_head_permutation(
-                layout["query_heads"],
-                layout["key_value_heads"],
-                layout["head_dim"],
-                seed,
-            ),
-        )
-        for seed in seeds
-    }

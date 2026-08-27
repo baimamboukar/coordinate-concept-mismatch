@@ -13,16 +13,17 @@ from probe_transfer.alignment.methods import (
     fit_positive_diagonal_alignment,
 )
 from probe_transfer.extraction.activations import load_activation_split
+from probe_transfer.symmetry.cases import TransformationCase
 from probe_transfer.symmetry.coordinates import CoordinateTransform
 from probe_transfer.symmetry.protocol import estimated_alignment_enabled, selected_models
 
-MapKey = tuple[int, str, float, int]
+MapKey = tuple[int, str, float, str]
 
 
 def estimate_transformation_maps(
     baseline_dir: Path,
     config: dict[str, Any],
-    transformations: dict[int, CoordinateTransform],
+    cases: tuple[TransformationCase, ...],
 ) -> tuple[dict[MapKey, AlignmentMap], list[dict[str, Any]]]:
     if not estimated_alignment_enabled(config):
         return {}, []
@@ -49,8 +50,8 @@ def estimate_transformation_maps(
                     "validation",
                 )
                 source_fit = train[:fit_rows]
-                for transformation_seed, transformation in transformations.items():
-                    target_fit = transformation.apply_array(source_fit)
+                for case in cases:
+                    target_fit = case.coordinates.apply_array(source_fit)
                     if settings["method"] == "exact_permutation":
                         fitted = fit_exact_permutation_alignment(source_fit, target_fit)
                     elif settings["method"] == "permutation":
@@ -65,17 +66,17 @@ def estimate_transformation_maps(
                             target_fit,
                             relative_tolerance=settings["fit_relative_tolerance"],
                         )
-                    key = (data_seed, model, depth, transformation_seed)
+                    key = (data_seed, model, depth, case.key)
                     maps[key] = fitted
                     diagnostics.append(
                         _diagnostic(
                             fitted,
                             validation,
-                            transformation,
+                            case.coordinates,
                             data_seed,
                             model,
                             depth,
-                            transformation_seed,
+                            case,
                             fit_rows,
                             settings.get("scale_match_rtol", 0.0),
                         )
@@ -100,7 +101,7 @@ def _diagnostic(
     data_seed: int,
     model: str,
     depth: float,
-    transformation_seed: int,
+    case: TransformationCase,
     fit_rows: int,
     scale_match_rtol: float,
 ) -> dict[str, Any]:
@@ -109,7 +110,7 @@ def _diagnostic(
         "data_seed": data_seed,
         "model": model,
         "depth": depth,
-        "transformation_seed": transformation_seed,
+        **case.fields(),
         "method": fitted.method,
         "fit_rows": fit_rows,
         **fitted.metadata,

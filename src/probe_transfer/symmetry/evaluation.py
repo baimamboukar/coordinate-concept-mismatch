@@ -19,6 +19,7 @@ from probe_transfer.probes.transport import (
     load_probe_bundle,
     save_probe_bundle,
 )
+from probe_transfer.symmetry.cases import TransformationCase
 from probe_transfer.symmetry.coordinates import CoordinateTransform
 from probe_transfer.symmetry.protocol import estimated_alignment_enabled, selected_models
 from probe_transfer.symmetry.recovery import recovery_record
@@ -28,8 +29,8 @@ def evaluate_transformations(
     baseline_dir: Path,
     output_dir: Path,
     config: dict[str, Any],
-    transformations: dict[int, CoordinateTransform],
-    estimated_maps: dict[tuple[int, str, float, int], AlignmentMap] | None = None,
+    cases: tuple[TransformationCase, ...],
+    estimated_maps: dict[tuple[int, str, float, str], AlignmentMap] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     baseline_metrics = _reference_metrics(baseline_dir / "results" / "metrics.jsonl")
     metrics: list[dict[str, Any]] = []
@@ -53,7 +54,7 @@ def evaluate_transformations(
                     probes,
                     model_name,
                     data_seed,
-                    transformations,
+                    cases,
                     checksums,
                 )
                 for probe_name, probe in sorted(probes.items()):
@@ -88,7 +89,7 @@ def evaluate_transformations(
                         config,
                     )
 
-                    kind = next(iter(transformations.values())).kind
+                    kind = cases[0].coordinates.kind
                     identity = CoordinateTransform.identity(kind, values.shape[1])
                     identity_scores = probe.transport(identity).scores(identity.apply_array(values))
                     _assert_score_match(reference_scores, identity_scores, config)
@@ -106,7 +107,8 @@ def evaluate_transformations(
                         config,
                     )
 
-                    for transformation_seed, transformation in transformations.items():
+                    for case in cases:
+                        transformation = case.coordinates
                         transformed_values = transformation.apply_array(values)
                         raw_scores = probe.scores(transformed_values)
                         transported_scores = probe.transport(transformation).scores(
@@ -124,7 +126,7 @@ def evaluate_transformations(
                         if estimated_alignment_enabled(config):
                             if estimated_maps is None:
                                 raise ValueError("Estimated symmetry alignment maps are required.")
-                            key = (data_seed, model_name, depth, transformation_seed)
+                            key = (data_seed, model_name, depth, case.key)
                             estimated_scores = probe.scores(
                                 estimated_maps[key].transform(transformed_values)
                             )
@@ -135,7 +137,7 @@ def evaluate_transformations(
                                 prediction_file,
                                 context,
                                 condition,
-                                transformation_seed,
+                                case,
                                 row_ids.numpy(),
                                 label_values,
                                 scores,
@@ -146,7 +148,7 @@ def evaluate_transformations(
                         recoveries.append(
                             recovery_record(
                                 context,
-                                transformation_seed,
+                                case,
                                 label_values,
                                 reference_scores,
                                 raw_scores,
@@ -174,7 +176,7 @@ def _record_condition(
     prediction_file: TextIO,
     context: dict[str, Any],
     condition: str,
-    transformation_seed: int | None,
+    case: TransformationCase | None,
     row_ids: np.ndarray,
     labels: np.ndarray,
     scores: np.ndarray,
@@ -192,7 +194,7 @@ def _record_condition(
     record = {
         **context,
         "condition": condition,
-        "transformation_seed": transformation_seed,
+        **({"transformation_seed": None} if case is None else case.fields()),
         **values,
     }
     metrics.append(record)
@@ -201,7 +203,7 @@ def _record_condition(
             {
                 **context,
                 "condition": condition,
-                "transformation_seed": transformation_seed,
+                **({"transformation_seed": None} if case is None else case.fields()),
                 **row,
             },
             sort_keys=True,
@@ -217,19 +219,17 @@ def _save_transported_probes(
     probes: dict[str, StoredProbe],
     model: str,
     data_seed: int,
-    transformations: dict[int, CoordinateTransform],
+    cases: tuple[TransformationCase, ...],
     checksums: dict[str, str],
 ) -> None:
-    for transformation_seed, transformation in transformations.items():
+    for case in cases:
+        transformation = case.coordinates
         transported = {name: probe.transport(transformation) for name, probe in probes.items()}
-        relative = (
-            f"probes/{transformation.artifact_label}_{transformation_seed}/"
-            f"seed_{data_seed}/{model}.safetensors"
-        )
+        relative = f"probes/{case.key}/seed_{data_seed}/{model}.safetensors"
         checksums[relative] = save_probe_bundle(
             output_dir / relative,
             transported,
-            metadata_updates={"transformation_seed": transformation_seed},
+            metadata_updates=case.fields(),
         )
 
 
