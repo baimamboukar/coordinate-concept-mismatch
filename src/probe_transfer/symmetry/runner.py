@@ -5,6 +5,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+import torch
+
 from core.constants import ACTIVATION_ROWS_ENV, BASELINE_ARTIFACT_ENV, EXPERIMENT_OUTPUT_ENV
 from core.tracking import Tracker
 from probe_transfer.artifacts import write_json, write_jsonl
@@ -15,7 +17,10 @@ from probe_transfer.symmetry.alignment import estimate_permutation_maps
 from probe_transfer.symmetry.evaluation import evaluate_permutations
 from probe_transfer.symmetry.gate import run_function_gates
 from probe_transfer.symmetry.protocol import estimated_alignment_enabled
-from probe_transfer.symmetry.transforms import seeded_permutation
+from probe_transfer.symmetry.transforms import (
+    seeded_gqa_head_permutation,
+    seeded_permutation,
+)
 
 
 def run_symmetry_experiment(config: dict[str, Any], tracker: Tracker) -> None:
@@ -33,9 +38,7 @@ def run_symmetry_experiment(config: dict[str, Any], tracker: Tracker) -> None:
         "Runtime",
         f"{runtime['gpu']} with {runtime['memory_gb']:.1f} GiB; {free_disk:.1f} GiB free.",
     )
-    permutations = {
-        seed: seeded_permutation(symmetry["width"], seed) for seed in symmetry["permutation_seeds"]
-    }
+    permutations = _seeded_permutations(symmetry)
     rows = load_prepared_rows(
         prepared / "test.jsonl", config["materials"]["expected_test_rows"], require_balanced=False
     )
@@ -152,3 +155,19 @@ def _required_directory(name: str, *, create: bool = False) -> Path:
     elif not path.is_dir():
         raise FileNotFoundError(f"Directory not found: {path}")
     return path
+
+
+def _seeded_permutations(symmetry: dict[str, Any]) -> dict[int, torch.Tensor]:
+    seeds = symmetry["permutation_seeds"]
+    if symmetry["transformation"] != "attention_head_permutation":
+        return {seed: seeded_permutation(symmetry["width"], seed) for seed in seeds}
+    layout = symmetry["attention_layout"]
+    return {
+        seed: seeded_gqa_head_permutation(
+            layout["query_heads"],
+            layout["key_value_heads"],
+            layout["head_dim"],
+            seed,
+        )
+        for seed in seeds
+    }

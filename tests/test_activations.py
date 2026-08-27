@@ -141,6 +141,41 @@ def test_extracts_mlp_intermediate_activations() -> None:
     assert torch.isfinite(tensors["layer_50"]).all()
 
 
+def test_extracts_attention_output_activations() -> None:
+    model = MistralForCausalLM(
+        MistralConfig(
+            hidden_size=8,
+            intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            vocab_size=32,
+            attention_dropout=0.0,
+        )
+    ).eval()
+    rows = [
+        {"row_id": 1, "prompt": "one two", "label": 0},
+        {"row_id": 2, "prompt": "one two three", "label": 1},
+    ]
+
+    tensors, stats = extract_activation_tensors(
+        rows,
+        FakeTokenizer(),
+        model,
+        num_layers=2,
+        hidden_size=8,
+        normalized_depths=[0.5],
+        max_length=4,
+        batch_size=2,
+        activation_site="attention_output",
+    )
+
+    assert stats.block_indices == (1,)
+    assert tensors["layer_50"].shape == (2, 8)
+    assert torch.isfinite(tensors["layer_50"]).all()
+
+
 def test_bucket_uri_rejects_unsafe_paths() -> None:
     assert bucket_uri("user/bucket", "studies/run/file.safetensors") == (
         "hf://buckets/user/bucket/studies/run/file.safetensors"

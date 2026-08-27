@@ -5,6 +5,7 @@ from core.constants import HF_BUCKET
 from probe_transfer.alignment.materials import direction_groups
 from probe_transfer.extraction.sites import (
     ACTIVATION_SITES,
+    ATTENTION_OUTPUT,
     MLP_INTERMEDIATE,
     RESIDUAL_STREAM,
     activation_width,
@@ -110,6 +111,7 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
     expected_site = {
         "residual_permutation": RESIDUAL_STREAM,
         "mlp_neuron_permutation": MLP_INTERMEDIATE,
+        "attention_head_permutation": ATTENTION_OUTPUT,
     }.get(transformation)
     if expected_site is None or site != expected_site:
         raise ConfigError("The symmetry transformation and activation site are incompatible.")
@@ -131,6 +133,8 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
     widths = {activation_width(config["activations"], config["models"][name]) for name in models}
     if widths != {symmetry.get("width")}:
         raise ConfigError("Every transformed model must match the configured activation width.")
+    if transformation == "attention_head_permutation":
+        _validate_attention_layout(config, models)
     smoke_rows = symmetry.get("smoke_gate_rows", 0)
     if smoke_rows < 0 or smoke_rows >= symmetry["gate_rows"]:
         raise ConfigError("Symmetry smoke rows must be non-negative and smaller than gate rows.")
@@ -150,6 +154,28 @@ def _validate_symmetry(config: dict[str, Any]) -> None:
             raise ConfigError("Estimated alignment validation rows must match the protected split.")
         if settings.get("device") not in {"cpu", "cuda", "auto"}:
             raise ConfigError("Estimated alignment device must be cpu, cuda, or auto.")
+
+
+def _validate_attention_layout(config: dict[str, Any], models: list[str]) -> None:
+    symmetry = config["symmetry"]
+    layout = symmetry.get("attention_layout")
+    keys = ("query_heads", "key_value_heads", "head_dim")
+    if not isinstance(layout, dict) or any(type(layout.get(key)) is not int for key in keys):
+        raise ConfigError("Attention symmetry requires an integer attention_layout.")
+    query_heads, key_value_heads, head_dim = (layout[key] for key in keys)
+    if min(query_heads, key_value_heads, head_dim) < 1 or query_heads % key_value_heads:
+        raise ConfigError("Attention symmetry requires a valid grouped-query head layout.")
+    if query_heads * head_dim != symmetry["width"]:
+        raise ConfigError("Attention head layout must match the probed activation width.")
+    expected = {
+        "attention_heads": query_heads,
+        "key_value_heads": key_value_heads,
+        "head_dim": head_dim,
+    }
+    for name in models:
+        model = config["models"][name]
+        if any(model.get(key) != value for key, value in expected.items()):
+            raise ConfigError(f"Attention layout does not match configured model {name}.")
 
 
 def _validate_activation_protocol(config: dict[str, Any]) -> None:

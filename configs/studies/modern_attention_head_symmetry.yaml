@@ -1,0 +1,109 @@
+extends: ../defaults.yaml
+name: modern_attention_head_symmetry
+
+models:
+  mistral:
+    backend: huggingface
+    id: mistralai/Mistral-7B-v0.3
+    revision: caa1feb0e54d415e2df31207e5f4e273e33509b1
+    artifact_key: mistral-7b-v0.3
+    layers: 32
+    hidden_size: 4096
+    intermediate_size: 14336
+    attention_heads: 32
+    key_value_heads: 8
+    head_dim: 128
+    role: exact_symmetry_control
+
+activations:
+  site: attention_output
+  artifact_key: attention-output
+  dtype: bfloat16
+  storage_dtype: bfloat16
+  batch_size: 8
+  normalized_depths: [0.75]
+  primary_depth: 0.75
+
+extraction:
+  models: [mistral]
+
+execution:
+  accelerators: [H200]
+  minimum_gpu_memory_gb: 120
+
+tracking:
+  wandb: true
+  mode: offline
+  local_report: false
+
+pipeline:
+  stages:
+    preflight:
+      name: modern_attention_head_permutation_probe_transport
+      tracking: {wandb: false, local_report: false}
+    extract:
+      name: modern_attention_head_permutation_probe_transport
+      tracking: {wandb: false, local_report: false}
+    transfer:
+      name: modern_attention_head_permutation_probe_transport
+      artifact_variant: baseline
+      training: true
+      evaluation:
+        primary_metrics: [auroc]
+        pair_groups: {}
+        oracle_gate: 0.75
+        minimum_gap: 0.10
+    symmetry:
+      name: modern_attention_head_permutation_probe_transport
+      materials:
+        source_name: modern_attention_head_permutation_probe_transport
+        source_study: modern_attention_head_symmetry
+        source_variant: baseline
+        expected_train_rows: 12000
+        expected_validation_rows: 2000
+        expected_test_rows: 1699
+      symmetry:
+        transformation: attention_head_permutation
+        models: [mistral]
+        width: 4096
+        attention_layout:
+          query_heads: 32
+          key_value_heads: 8
+          head_dim: 128
+        permutation_seeds: [42, 137]
+        probed_depths: [0.75]
+        primary_depth: 0.75
+        gate_rows: 1699
+        smoke_gate_rows: 8
+        gate_batch_size: 2
+        gate_max_length: 512
+        gate_dtype: float64
+        logit_atol: 0.00003
+        logit_rtol: 0.00001
+        activation_relative_tolerance: 0.00001
+        estimated_alignment:
+          enabled: true
+          method: exact_permutation
+          fit_split: train
+          diagnostic_split: validation
+          fit_rows: 2000
+          device: cpu
+      evaluation:
+        primary_metrics:
+          - raw_auroc_gap
+          - recovery_fraction
+          - estimated_recovery_fraction
+        additional_metrics:
+          - auroc
+          - threshold_transfer
+          - score_agreement
+          - alignment_relative_rmse
+          - alignment_mean_cosine
+          - permutation_match_fraction
+        oracle_gate: 0.75
+        minimum_gap: 0.10
+        minimum_recovery: 0.95
+        auroc_recovery_atol: 0.01
+        score_atol: 0.0001
+        score_rtol: 0.00001
+        reference_auroc_atol: 0.00001
