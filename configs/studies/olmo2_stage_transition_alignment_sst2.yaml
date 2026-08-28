@@ -1,0 +1,19 @@
+extends: olmo2_seed_decomposition_sst2.yaml
+name: olmo2_stage_transition_alignment_sst2
+
+pipeline:
+  stages:
+    align:
+      name: olmo2_stage_transition_alignment
+      artifact_variant: sst2-lineage-alignment
+      evaluation:
+        primary_pair_group: lineage_control
+        pair_groups:
+          primary: []
+          lineage_control:
+            - [olmo2_stage1_parent, olmo2_seed_42069]
+            - [olmo2_seed_42069, olmo2_stage1_parent]
+            - [olmo2_stage1_parent, olmo2_seed_666]
+            - [olmo2_seed_666, olmo2_stage1_parent]
+            - [olmo2_stage1_parent, olmo2_seed_42]
+            - [olmo2_seed_42, olmo2_stage1_parent]

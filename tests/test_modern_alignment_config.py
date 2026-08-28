@@ -77,3 +77,25 @@ def test_olmo2_seed_decomposition_is_task_replicated_and_counted() -> None:
         assert alignment["alignment"]["depths"] == [0.25, 0.5, 0.75, 1.0]
         assert transfer["expected_outputs"] == counts["transfer"]
         assert alignment["expected_outputs"] == counts["align"]
+
+
+def test_olmo2_stage_transition_alignment_reuses_the_fixed_baseline() -> None:
+    study = load_config(CONFIGS_DIR / "studies" / "olmo2_stage_transition_alignment_sst2.yaml")
+    alignment = materialize_stage(study, "align")
+    directions = direction_groups(alignment)
+
+    assert len(directions) == 6
+    assert {group for _, _, group in directions} == {"lineage_control"}
+    assert alignment["evaluation"]["primary_pair_group"] == "lineage_control"
+    assert alignment["alignment"]["primary_depth"] == 0.75
+    assert alignment["alignment"]["primary_probe_family"] == "linear"
+    assert alignment["alignment"]["primary_method"] == "permutation_diagonal"
+    assert alignment["materials"]["source_study"] == "olmo2_seed_decomposition_sst2"
+    assert alignment["materials"]["source_variant"] == "sst2-baseline"
+    assert alignment["artifact_variant"] == "sst2-lineage-alignment"
+    assert alignment["expected_outputs"] == {
+        "metrics_rows": 552,
+        "prediction_rows": 481344,
+        "recovery_rows": 408,
+        "alignment_diagnostic_rows": 288,
+    }
