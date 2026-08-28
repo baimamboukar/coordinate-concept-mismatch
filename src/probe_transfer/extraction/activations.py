@@ -32,6 +32,7 @@ def extract_activation_tensors(
     normalized_depths: list[float],
     max_length: int,
     batch_size: int,
+    add_special_tokens: bool = True,
     activation_site: str = RESIDUAL_STREAM,
     storage_dtype: torch.dtype = torch.bfloat16,
 ) -> tuple[dict[str, torch.Tensor], ActivationStats]:
@@ -61,10 +62,11 @@ def extract_activation_tensors(
         for start in range(0, len(rows), batch_size):
             stop = min(start + batch_size, len(rows))
             prompts = [row["prompt"] for row in rows[start:stop]]
-            lengths = _token_lengths(tokenizer, prompts)
+            lengths = _token_lengths(tokenizer, prompts, add_special_tokens)
             truncated_rows += sum(length > max_length for length in lengths)
             encoded = tokenizer(
                 prompts,
+                add_special_tokens=add_special_tokens,
                 padding=True,
                 truncation=True,
                 max_length=max_length,
@@ -147,8 +149,14 @@ def load_activation_split(
     return activations, row_ids, labels
 
 
-def _token_lengths(tokenizer: Any, prompts: list[str]) -> list[int]:
-    encoded = tokenizer(prompts, padding=False, truncation=False, return_length=True)
+def _token_lengths(tokenizer: Any, prompts: list[str], add_special_tokens: bool) -> list[int]:
+    encoded = tokenizer(
+        prompts,
+        add_special_tokens=add_special_tokens,
+        padding=False,
+        truncation=False,
+        return_length=True,
+    )
     lengths = encoded.get("length")
     if lengths is not None:
         return [int(length) for length in lengths]

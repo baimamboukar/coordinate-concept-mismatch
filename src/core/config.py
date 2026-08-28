@@ -86,6 +86,8 @@ def _validate_study(data: dict[str, Any], path: Path) -> None:
         raise ConfigError("deterministic must be a boolean.")
 
     _validate_huggingface_resources(data.get("models", {}), "model")
+    if "tokenizer" in data:
+        _validate_huggingface_resources({"tokenizer": data["tokenizer"]}, "tokenizer")
     if "dataset" in data:
         _validate_huggingface_resources({"dataset": data["dataset"]}, "dataset")
     pipeline = data.get("pipeline")

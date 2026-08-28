@@ -23,6 +23,7 @@ class FakeTokenizer:
         self,
         prompts,
         *,
+        add_special_tokens=True,
         padding=False,
         truncation=False,
         max_length=None,
@@ -84,6 +85,35 @@ def test_extracts_post_block_last_token_activations() -> None:
     assert tensors["layer_25"].shape == (2, 3)
     assert torch.equal(tensors["row_ids"], torch.tensor([10, 11]))
     assert torch.all(tensors["layer_100"][0] == 6)
+
+
+def test_special_token_policy_is_applied_to_length_and_batch_tokenization() -> None:
+    class RecordingTokenizer(FakeTokenizer):
+        def __init__(self) -> None:
+            self.policies = []
+
+        def __call__(self, prompts, *, add_special_tokens=True, **kwargs):
+            self.policies.append(add_special_tokens)
+            return super().__call__(
+                prompts,
+                add_special_tokens=add_special_tokens,
+                **kwargs,
+            )
+
+    tokenizer = RecordingTokenizer()
+    extract_activation_tensors(
+        [{"row_id": 1, "prompt": "one two", "label": 0}],
+        tokenizer,
+        FakeModel(),
+        num_layers=4,
+        hidden_size=3,
+        normalized_depths=[1.0],
+        max_length=3,
+        batch_size=1,
+        add_special_tokens=False,
+    )
+
+    assert tokenizer.policies == [False, False]
 
 
 def test_saved_file_and_repeatability_are_verified(tmp_path: Path) -> None:

@@ -19,6 +19,7 @@ class FakeTokenizer:
         self,
         prompts,
         *,
+        add_special_tokens=True,
         padding=False,
         truncation=False,
         max_length=None,

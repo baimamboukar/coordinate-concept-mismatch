@@ -278,3 +278,5 @@ def _validate_activation_protocol(config: dict[str, Any]) -> None:
         raise ConfigError("The current pipeline requires raw prompts.")
     if activations.get("token_position") != "last_non_padding":
         raise ConfigError("The current pipeline requires last-non-padding activations.")
+    if not isinstance(activations.get("add_special_tokens", True), bool):
+        raise ConfigError("add_special_tokens must be a boolean.")

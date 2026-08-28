@@ -41,12 +41,16 @@ def load_activation_model(
     model_id: str,
     revision: str,
     *,
+    tokenizer_id: str | None = None,
+    tokenizer_revision: str | None = None,
     dtype: str = "bfloat16",
     device_map: str | dict[str, Any] = "auto",
     trust_remote_code: bool = False,
 ) -> tuple[Any, Any]:
     if not is_pinned_hf_revision(revision):
         raise ValueError("Hugging Face models require an exact 40-character commit revision.")
+    if tokenizer_revision is not None and not is_pinned_hf_revision(tokenizer_revision):
+        raise ValueError("Hugging Face tokenizers require an exact 40-character commit revision.")
 
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -56,13 +60,17 @@ def load_activation_model(
         raise ValueError(f"Unsupported torch dtype: {dtype}")
 
     common = {
-        "revision": revision,
         "token": os.getenv("HF_TOKEN"),
         "trust_remote_code": trust_remote_code,
     }
-    tokenizer = AutoTokenizer.from_pretrained(model_id, **common)
+    tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_id or model_id,
+        revision=tokenizer_revision or revision,
+        **common,
+    )
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
+        revision=revision,
         dtype=torch_dtype,
         device_map=device_map,
         **common,

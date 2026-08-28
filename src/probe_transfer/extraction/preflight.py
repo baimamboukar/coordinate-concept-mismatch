@@ -38,6 +38,8 @@ def run_extraction_preflight(
     tokenizer, model = load_activation_model(
         model_config["id"],
         model_config["revision"],
+        tokenizer_id=config.get("tokenizer", {}).get("id"),
+        tokenizer_revision=config.get("tokenizer", {}).get("revision"),
         dtype=config["activations"]["dtype"],
     )
     try:

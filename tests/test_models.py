@@ -14,6 +14,16 @@ def test_huggingface_revision_must_be_pinned() -> None:
         load_activation_model("organization/model", "main")
 
 
+def test_shared_tokenizer_revision_must_be_pinned() -> None:
+    with pytest.raises(ValueError, match="tokenizers require"):
+        load_activation_model(
+            "organization/model",
+            "a" * 40,
+            tokenizer_id="organization/tokenizer",
+            tokenizer_revision="main",
+        )
+
+
 def test_openrouter_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 

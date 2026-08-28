@@ -99,3 +99,32 @@ def test_olmo2_stage_transition_alignment_reuses_the_fixed_baseline() -> None:
         "recovery_rows": 408,
         "alignment_diagnostic_rows": 288,
     }
+
+
+def test_olmo1_independent_training_uses_a_shared_tokenizer() -> None:
+    study = load_config(CONFIGS_DIR / "studies" / "olmo1_independent_training_sst2.yaml")
+    transfer = materialize_stage(study, "transfer")
+    alignment = materialize_stage(study, "align")
+
+    assert study["activations"]["add_special_tokens"] is False
+    assert study["tokenizer"] == {
+        "backend": "huggingface",
+        "id": "allenai/OLMo-1B-hf",
+        "revision": "aee7752d9c08ee4775e9b0091426d8410e8f6a89",
+    }
+    assert direction_groups(alignment) == [
+        ("ai2_olmo1", "amd_olmo1", "primary"),
+        ("amd_olmo1", "ai2_olmo1", "primary"),
+    ]
+    assert transfer["expected_outputs"] == {
+        "metrics_rows": 48,
+        "prediction_rows": 41856,
+        "transfer_gap_rows": 24,
+        "probe_bundles": 4,
+    }
+    assert alignment["expected_outputs"] == {
+        "metrics_rows": 184,
+        "prediction_rows": 160448,
+        "recovery_rows": 136,
+        "alignment_diagnostic_rows": 96,
+    }

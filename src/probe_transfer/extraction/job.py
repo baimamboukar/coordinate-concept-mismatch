@@ -58,6 +58,8 @@ def run_extraction_job(
     tokenizer, model = model_loader(
         model_config["id"],
         model_config["revision"],
+        tokenizer_id=config.get("tokenizer", {}).get("id"),
+        tokenizer_revision=config.get("tokenizer", {}).get("revision"),
         dtype=activations["dtype"],
     )
     if execution:
@@ -200,6 +202,8 @@ def _validate_settings(config: Mapping[str, Any], splits: tuple[PreparedSplit, .
         "last_non_padding"
     ):
         raise ValueError("Full extraction requires raw prompts and last-non-padding activations.")
+    if not isinstance(activations.get("add_special_tokens", True), bool):
+        raise TypeError("add_special_tokens must be a boolean.")
     repeat_rows = extraction["repeatability_rows"]
     if repeat_rows < 1 or any(repeat_rows > split.expected_rows for split in splits):
         raise ValueError("repeatability_rows must fit every prepared split.")
@@ -229,6 +233,7 @@ def extract_rows(
         normalized_depths=activations["normalized_depths"],
         max_length=activations["max_length"],
         batch_size=activations["batch_size"],
+        add_special_tokens=activations.get("add_special_tokens", True),
         activation_site=activations.get("site", "residual_stream"),
         storage_dtype=storage_dtype,
     )
@@ -274,6 +279,7 @@ def _metadata(
 ) -> dict[str, str]:
     activations = config["activations"]
     dataset = config["dataset"]
+    tokenizer = config.get("tokenizer", {})
     return {
         "model": str(model["id"]),
         "model_revision": str(model["revision"]),
@@ -285,6 +291,9 @@ def _metadata(
         "block_indices": json.dumps(stats.block_indices),
         "normalized_depths": json.dumps(activations["normalized_depths"]),
         "max_length": str(activations["max_length"]),
+        "tokenizer": str(tokenizer.get("id", model["id"])),
+        "tokenizer_revision": str(tokenizer.get("revision", model["revision"])),
+        "add_special_tokens": json.dumps(activations.get("add_special_tokens", True)),
         "token_position": "last_non_padding",
         "activation_boundary": activation_boundary(activations.get("site", "residual_stream")),
     }
