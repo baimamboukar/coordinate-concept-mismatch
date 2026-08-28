@@ -5,9 +5,11 @@ from typing import Any
 SEMANTIC_KEY = re.compile(r"^[a-z0-9]+(?:-[a-z0-9.]+)*$")
 
 
-def activation_prefix(config: dict[str, Any], model_name: str) -> str:
+def activation_prefix(
+    config: dict[str, Any], model_name: str, *, dataset_key: str | None = None
+) -> str:
     prefix = (
-        f"activations/{_key(config['artifacts']['dataset_key'])}/"
+        f"activations/{_key(dataset_key or config['artifacts']['dataset_key'])}/"
         f"{model_artifact_key(config, model_name)}"
     )
     variant = config.get("activations", {}).get("artifact_key")

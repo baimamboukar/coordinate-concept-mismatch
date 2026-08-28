@@ -13,6 +13,8 @@ from probe_transfer.layout import activation_prefix, model_artifact_key, stage_p
 from probe_transfer.materialization import (
     materialize_activations,
     materialize_baseline,
+    materialize_fit_activations,
+    materialize_recovery_reference,
 )
 from probe_transfer.preparation import prepare_dataset
 from probe_transfer.publication import Publication
@@ -49,8 +51,15 @@ def _transfer(config: dict[str, Any], tracker: Tracker, model: str | None) -> No
 
 def _align(config: dict[str, Any], tracker: Tracker, model: str | None) -> None:
     _reject_model(model)
-    materialize_baseline(config, _environment_path(BASELINE_ARTIFACT_ENV))
-    run_alignment_experiment(config, tracker)
+    baseline = _environment_path(BASELINE_ARTIFACT_ENV)
+    materialize_baseline(config, baseline)
+    fit_root = None
+    reference_path = None
+    if config.get("fit_materials") is not None:
+        fit_root = baseline / "fit"
+        materialize_fit_activations(config, fit_root)
+        reference_path = materialize_recovery_reference(config, baseline / "reference")
+    run_alignment_experiment(config, tracker, fit_root=fit_root, reference_path=reference_path)
 
 
 def _symmetry(config: dict[str, Any], tracker: Tracker, model: str | None) -> None:

@@ -4,6 +4,10 @@ from typing import Any, TextIO
 
 import numpy as np
 
+from probe_transfer.alignment.cross_task import (
+    add_improvement_retention,
+    load_recovery_reference,
+)
 from probe_transfer.alignment.materials import (
     assert_references,
     direction_groups,
@@ -35,6 +39,9 @@ def evaluate_checkpoint_alignment(
     baseline_dir: Path,
     output_dir: Path,
     config: dict[str, Any],
+    *,
+    fit_root: Path | None = None,
+    reference_path: Path | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, str]]:
     baseline = load_baseline_metrics(baseline_dir / "results" / "metrics.jsonl")
     bundles = load_bundles(baseline_dir, config)
@@ -47,25 +54,24 @@ def evaluate_checkpoint_alignment(
     prediction_path.parent.mkdir(parents=True, exist_ok=True)
     comparison_index = 0
     materials = config["materials"]
-
+    fit_materials = config.get("fit_materials", materials)
+    fit_root = fit_root or baseline_dir
+    recovery_reference = load_recovery_reference(reference_path)
     with prediction_path.open("w") as prediction_file:
         for data_seed in config["data_seeds"]:
             for source, target, pair_group in direction_groups(config):
                 for depth in alignment["depths"]:
                     layer = layer_key(depth)
-                    train = paired_split(
-                        baseline_dir, source, target, f"seed_{data_seed}_train", layer
-                    )
+                    train = paired_split(fit_root, source, target, f"seed_{data_seed}_train", layer)
                     validation = paired_split(
                         baseline_dir, source, target, f"seed_{data_seed}_validation", layer
                     )
                     test = paired_split(baseline_dir, source, target, "test", layer)
-                    _assert_row_count(train, materials["expected_train_rows"], "train")
+                    _assert_row_count(train, fit_materials["expected_train_rows"], "fit train")
                     _assert_row_count(
                         validation, materials["expected_validation_rows"], "validation"
                     )
                     _assert_row_count(test, materials["expected_test_rows"], "test")
-
                     prepared_probes = []
                     for family in families(config, depth):
                         source_probe = bundles[data_seed, source][f"{layer}.{family}"]
@@ -196,16 +202,21 @@ def evaluate_checkpoint_alignment(
                                 expected["source"],
                                 config,
                             )
+                            recovery = alignment_recovery_record(
+                                {**context, "method": method},
+                                test[3],
+                                oracle_scores,
+                                raw_scores,
+                                scores,
+                                float(expected["source"]["auroc"]),
+                                config,
+                                config["seed"] + comparison_index,
+                            )
                             recoveries.append(
-                                alignment_recovery_record(
-                                    {**context, "method": method},
-                                    test[3],
-                                    oracle_scores,
-                                    raw_scores,
-                                    scores,
-                                    float(expected["source"]["auroc"]),
-                                    config,
-                                    config["seed"] + comparison_index,
+                                add_improvement_retention(
+                                    recovery,
+                                    recovery_reference,
+                                    tolerance=config["evaluation"]["reference_auroc_atol"],
                                 )
                             )
                             comparison_index += 1

@@ -5,6 +5,7 @@ from typing import Any
 from core.config import ConfigError, validate_evaluation
 from core.constants import HF_BUCKET
 from pipeline.sweep_validation import validate_probe_sensitivity
+from probe_transfer.alignment.cross_task import validate_cross_task_alignment
 from probe_transfer.alignment.materials import direction_groups
 from probe_transfer.extraction.sites import (
     ACTIVATION_SITES,
@@ -105,6 +106,7 @@ def _validate_alignment(config: dict[str, Any]) -> None:
     for split in ("train", "validation", "test"):
         if materials.get(f"expected_{split}_rows") != sampling[f"{split}_size"]:
             raise ConfigError(f"Alignment {split} rows must match the prepared split contract.")
+    validate_cross_task_alignment(config)
     direction_groups(config)
 
 

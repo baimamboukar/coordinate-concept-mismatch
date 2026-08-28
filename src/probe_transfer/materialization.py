@@ -23,6 +23,32 @@ def materialize_activations(
         )
 
 
+def materialize_fit_activations(config: dict[str, Any], destination: Path) -> None:
+    fit = config["fit_materials"]
+    for model in config["models"]:
+        _sync_public(
+            config,
+            activation_prefix(config, model, dataset_key=fit["dataset_key"]),
+            destination / "activations" / model,
+        )
+
+
+def materialize_recovery_reference(config: dict[str, Any], destination: Path) -> Path:
+    reference = config["reference_materials"]
+    source = study_prefix(
+        reference["source_name"],
+        reference["source_study"],
+        reference["source_variant"],
+    )
+    _sync_public(
+        config,
+        f"{source}/results",
+        destination / "results",
+        include="recovery.jsonl",
+    )
+    return destination / "results" / "recovery.jsonl"
+
+
 def materialize_baseline(
     config: dict[str, Any], destination: Path, models: list[str] | None = None
 ) -> None:

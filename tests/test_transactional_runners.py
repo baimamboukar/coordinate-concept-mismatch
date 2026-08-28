@@ -44,7 +44,13 @@ def test_alignment_validation_failure_leaves_retryable_output(
     monkeypatch.setenv("BASELINE_ARTIFACT_DIR", str(baseline))
     monkeypatch.setenv("EXPERIMENT_OUTPUT_DIR", str(output))
 
-    def fake_evaluation(_baseline, root, _config):
+    fit = tmp_path / "fit"
+
+    reference = tmp_path / "reference.jsonl"
+
+    def fake_evaluation(_baseline, root, _config, *, fit_root=None, reference_path=None):
+        assert fit_root == fit
+        assert reference_path == reference
         (root / "results").mkdir()
         return [], [], {}
 
@@ -57,7 +63,12 @@ def test_alignment_validation_failure_leaves_retryable_output(
     )
 
     with pytest.raises(ValueError, match="late validation failed"):
-        run_alignment_experiment({}, Tracker("test", tmp_path / "alignment-report.md"))
+        run_alignment_experiment(
+            {},
+            Tracker("test", tmp_path / "alignment-report.md"),
+            fit_root=fit,
+            reference_path=reference,
+        )
 
     assert not (output / "results").exists()
     assert not list(output.glob(".alignment-*"))

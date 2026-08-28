@@ -1,0 +1,18 @@
+extends: olmo1_independent_training_sst2.yaml
+name: olmo1_map_transport_wildguard_to_sst2
+
+pipeline:
+  stages:
+    align:
+      name: olmo1_cross_task_map_transport
+      artifact_variant: wildguard-fit-sst2-eval
+      fit_materials:
+        source_study: olmo1_independent_training_wildguard
+        dataset_key: wildguardmix-v1
+        expected_train_rows: 12000
+      reference_materials:
+        source_name: olmo1_independent_alignment
+        source_study: olmo1_independent_training_sst2
+        source_variant: sst2-alignment
+      alignment:
+        primary_method: affine_ridge

@@ -9,7 +9,13 @@ from probe_transfer.alignment.evaluation import evaluate_checkpoint_alignment
 from probe_transfer.atomic import publish_directories
 
 
-def run_alignment_experiment(config: dict[str, Any], tracker: Tracker) -> None:
+def run_alignment_experiment(
+    config: dict[str, Any],
+    tracker: Tracker,
+    *,
+    fit_root: Path | None = None,
+    reference_path: Path | None = None,
+) -> None:
     baseline_dir = _required_directory(BASELINE_ARTIFACT_ENV)
     output_dir = _required_directory(EXPERIMENT_OUTPUT_ENV, create=True)
     if (output_dir / "results").exists():
@@ -17,7 +23,13 @@ def run_alignment_experiment(config: dict[str, Any], tracker: Tracker) -> None:
 
     with TemporaryDirectory(prefix=".alignment-", dir=output_dir) as temporary:
         staging = Path(temporary)
-        recoveries, diagnostics, _ = evaluate_checkpoint_alignment(baseline_dir, staging, config)
+        recoveries, diagnostics, _ = evaluate_checkpoint_alignment(
+            baseline_dir,
+            staging,
+            config,
+            fit_root=fit_root,
+            reference_path=reference_path,
+        )
         _assert_expected_outputs(staging, config)
         primary = _primary_recoveries(recoveries, config)
         if not primary:

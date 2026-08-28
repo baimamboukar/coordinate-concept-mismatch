@@ -134,3 +134,40 @@ def test_olmo1_independent_training_is_task_replicated_with_shared_tokenizer() -
             "recovery_rows": 136,
             "alignment_diagnostic_rows": 96,
         }
+
+
+def test_olmo1_alignment_maps_are_transportable_across_tasks() -> None:
+    expected = {
+        "olmo1_map_transport_sst2_to_wildguard": (
+            "sst2-sentiment-v1",
+            "olmo1_independent_training_sst2",
+            "sst2-fit-wildguard-eval",
+            312616,
+        ),
+        "olmo1_map_transport_wildguard_to_sst2": (
+            "wildguardmix-v1",
+            "olmo1_independent_training_wildguard",
+            "wildguard-fit-sst2-eval",
+            160448,
+        ),
+    }
+
+    for study_name, (dataset_key, source_study, variant, predictions) in expected.items():
+        study = load_config(CONFIGS_DIR / "studies" / f"{study_name}.yaml")
+        alignment = materialize_stage(study, "align")
+
+        assert alignment["alignment"]["primary_method"] == "affine_ridge"
+        assert alignment["fit_materials"] == {
+            "dataset_key": dataset_key,
+            "expected_train_rows": 12000,
+            "source_study": source_study,
+        }
+        assert alignment["artifact_variant"] == variant
+        assert alignment["reference_materials"]["source_name"] == "olmo1_independent_alignment"
+        assert alignment["reference_materials"]["source_study"] != source_study
+        assert alignment["expected_outputs"] == {
+            "metrics_rows": 184,
+            "prediction_rows": predictions,
+            "recovery_rows": 136,
+            "alignment_diagnostic_rows": 96,
+        }
