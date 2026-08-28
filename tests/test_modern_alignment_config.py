@@ -31,3 +31,49 @@ def test_two_model_alignment_retains_bidirectional_primary_default() -> None:
         ("first", "second", "primary"),
         ("second", "first", "primary"),
     ]
+
+
+def test_olmo2_seed_decomposition_is_task_replicated_and_counted() -> None:
+    expected = {
+        "olmo2_seed_decomposition_wildguard": {
+            "transfer": {
+                "metrics_rows": 192,
+                "prediction_rows": 326208,
+                "transfer_gap_rows": 144,
+                "probe_bundles": 8,
+            },
+            "align": {
+                "metrics_rows": 552,
+                "prediction_rows": 937848,
+                "recovery_rows": 408,
+                "alignment_diagnostic_rows": 288,
+            },
+        },
+        "olmo2_seed_decomposition_sst2": {
+            "transfer": {
+                "metrics_rows": 192,
+                "prediction_rows": 167424,
+                "transfer_gap_rows": 144,
+                "probe_bundles": 8,
+            },
+            "align": {
+                "metrics_rows": 552,
+                "prediction_rows": 481344,
+                "recovery_rows": 408,
+                "alignment_diagnostic_rows": 288,
+            },
+        },
+    }
+
+    for study_name, counts in expected.items():
+        study = load_config(CONFIGS_DIR / "studies" / f"{study_name}.yaml")
+        transfer = materialize_stage(study, "transfer")
+        alignment = materialize_stage(study, "align")
+
+        assert len(study["models"]) == 4
+        assert len(transfer["evaluation"]["pair_groups"]["primary"]) == 6
+        assert len(transfer["evaluation"]["pair_groups"]["lineage_control"]) == 6
+        assert len(direction_groups(alignment)) == 6
+        assert alignment["alignment"]["depths"] == [0.25, 0.5, 0.75, 1.0]
+        assert transfer["expected_outputs"] == counts["transfer"]
+        assert alignment["expected_outputs"] == counts["align"]

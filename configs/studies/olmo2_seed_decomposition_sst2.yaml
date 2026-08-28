@@ -1,0 +1,36 @@
+extends: olmo2_seed_decomposition_wildguard.yaml
+name: olmo2_seed_decomposition_sst2
+
+dataset:
+  backend: huggingface
+  id: stanfordnlp/sst2
+  revision: 8d51e7e4887a4caaa95b3fbebbf53c0490b58bbb
+  train: {subset: null, split: train}
+  test: {subset: null, split: validation}
+  prompt_field: sentence
+  label_field: label
+  positive_label: 1
+  negative_label: 0
+  adversarial_field: null
+
+sampling:
+  train_size: 12000
+  validation_size: 2000
+  test_size: 872
+  balance_labels: true
+  stratify_by: []
+  protect_test: true
+
+artifacts:
+  dataset_key: sst2-sentiment-v1
+
+pipeline:
+  stages:
+    transfer:
+      artifact_variant: sst2-baseline
+    align:
+      artifact_variant: sst2-alignment
+      materials:
+        source_study: olmo2_seed_decomposition_sst2
+        source_variant: sst2-baseline
+        expected_test_rows: 872

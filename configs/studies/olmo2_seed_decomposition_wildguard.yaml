@@ -1,0 +1,135 @@
+extends: ../defaults.yaml
+name: olmo2_seed_decomposition_wildguard
+
+models:
+  olmo2_stage1_parent:
+    backend: huggingface
+    id: allenai/OLMo-2-0425-1B
+    revision: 9d3e43659f00c17e6da23cf32333afd1fc39fa1a
+    artifact_key: olmo2-1b-stage1-parent
+    layers: 16
+    hidden_size: 2048
+    role: shared_stage1_parent
+  olmo2_seed_42069:
+    backend: huggingface
+    id: allenai/OLMo-2-0425-1B
+    revision: ada39260a92eb8cfc2252b9e937f790fd5b0dbc1
+    artifact_key: olmo2-1b-stage2-seed-42069
+    layers: 16
+    hidden_size: 2048
+    role: shared_parent_stage2_seed
+  olmo2_seed_666:
+    backend: huggingface
+    id: allenai/OLMo-2-0425-1B
+    revision: b51c5f1b7c83a96b9a80bdaf14a2077c672fbccd
+    artifact_key: olmo2-1b-stage2-seed-666
+    layers: 16
+    hidden_size: 2048
+    role: shared_parent_stage2_seed
+  olmo2_seed_42:
+    backend: huggingface
+    id: allenai/OLMo-2-0425-1B
+    revision: f83cd641d4f00954eb25c781e0ac360debb3239e
+    artifact_key: olmo2-1b-stage2-seed-42
+    layers: 16
+    hidden_size: 2048
+    role: shared_parent_stage2_seed
+
+activations:
+  batch_size: 16
+  dtype: bfloat16
+  storage_dtype: bfloat16
+
+extraction:
+  models:
+    - olmo2_stage1_parent
+    - olmo2_seed_42069
+    - olmo2_seed_666
+    - olmo2_seed_42
+
+pipeline:
+  stages:
+    prepare:
+      name: olmo2_same_architecture_seed_decomposition
+      tracking: {wandb: false, local_report: false}
+    preflight:
+      name: olmo2_same_architecture_seed_decomposition
+      tracking: {wandb: false, local_report: false}
+    extract:
+      name: olmo2_same_architecture_seed_decomposition
+      tracking: {wandb: false, local_report: false}
+    transfer:
+      name: olmo2_same_architecture_seed_decomposition
+      artifact_variant: wildguard-baseline
+      training: true
+      evaluation:
+        primary_metrics: [auroc, auroc_transfer_gap]
+        pair_groups:
+          primary:
+            - [olmo2_seed_42069, olmo2_seed_666]
+            - [olmo2_seed_666, olmo2_seed_42069]
+            - [olmo2_seed_42069, olmo2_seed_42]
+            - [olmo2_seed_42, olmo2_seed_42069]
+            - [olmo2_seed_666, olmo2_seed_42]
+            - [olmo2_seed_42, olmo2_seed_666]
+          lineage_control:
+            - [olmo2_stage1_parent, olmo2_seed_42069]
+            - [olmo2_seed_42069, olmo2_stage1_parent]
+            - [olmo2_stage1_parent, olmo2_seed_666]
+            - [olmo2_seed_666, olmo2_stage1_parent]
+            - [olmo2_stage1_parent, olmo2_seed_42]
+            - [olmo2_seed_42, olmo2_stage1_parent]
+        oracle_gate: 0.75
+        minimum_gap: 0.10
+    align:
+      name: olmo2_same_architecture_seed_decomposition
+      artifact_variant: wildguard-alignment
+      materials:
+        source_name: olmo2_same_architecture_seed_decomposition
+        source_study: olmo2_seed_decomposition_wildguard
+        source_variant: wildguard-baseline
+        expected_train_rows: 12000
+        expected_validation_rows: 2000
+        expected_test_rows: 1699
+      alignment:
+        fit_split: train
+        diagnostic_split: validation
+        primary_depth: 0.75
+        depths: [0.25, 0.50, 0.75, 1.00]
+        primary_probe_family: linear
+        primary_method: permutation_diagonal
+        methods:
+          - permutation
+          - permutation_diagonal
+          - orthogonal_procrustes
+          - affine_ridge
+          - quotient_ridge
+        ridge_relative_alpha: 0.0001
+        quotient_svd_relative_threshold: 0.001
+        negative_control: shuffled_affine_ridge
+        shuffled_pairing_seed: 314
+        device: cuda
+      evaluation:
+        primary_metrics:
+          - aligned_auroc_improvement
+          - recovery_fraction
+          - residual_auroc_gap
+        additional_metrics:
+          - auroc
+          - alignment_relative_rmse
+          - alignment_mean_cosine
+          - negative_control_results
+        primary_pair_group: primary
+        pair_groups:
+          primary:
+            - [olmo2_seed_42069, olmo2_seed_666]
+            - [olmo2_seed_666, olmo2_seed_42069]
+            - [olmo2_seed_42069, olmo2_seed_42]
+            - [olmo2_seed_42, olmo2_seed_42069]
+            - [olmo2_seed_666, olmo2_seed_42]
+            - [olmo2_seed_42, olmo2_seed_666]
+        oracle_gate: 0.75
+        minimum_raw_gap: 0.10
+        minimum_improvement: 0.05
+        minimum_recovery: 0.50
+        reference_auroc_atol: 0.00001
