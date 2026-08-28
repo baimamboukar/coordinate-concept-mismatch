@@ -10,6 +10,7 @@ from probe_transfer.extraction.activations import (
     assert_repeatable,
     extract_activation_tensors,
     load_activation_split,
+    prompt_truncation_rate,
     save_activation_file,
 )
 from probe_transfer.layout import bucket_uri
@@ -114,6 +115,24 @@ def test_special_token_policy_is_applied_to_length_and_batch_tokenization() -> N
     )
 
     assert tokenizer.policies == [False, False]
+
+
+def test_full_prompt_audit_reports_truncation_rate() -> None:
+    rows = [
+        {"prompt": "one two"},
+        {"prompt": "one two three four"},
+        {"prompt": "one"},
+    ]
+
+    rate = prompt_truncation_rate(
+        rows,
+        FakeTokenizer(),
+        max_length=3,
+        add_special_tokens=False,
+        batch_size=2,
+    )
+
+    assert rate == pytest.approx(1 / 3)
 
 
 def test_saved_file_and_repeatability_are_verified(tmp_path: Path) -> None:

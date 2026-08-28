@@ -149,6 +149,25 @@ def load_activation_split(
     return activations, row_ids, labels
 
 
+def prompt_truncation_rate(
+    rows: list[dict[str, Any]],
+    tokenizer: Any,
+    *,
+    max_length: int,
+    add_special_tokens: bool,
+    batch_size: int = 256,
+) -> float:
+    if not rows or max_length < 1 or batch_size < 1:
+        raise ValueError("Prompt audit requires rows and positive length and batch settings.")
+    truncated = 0
+    for start in range(0, len(rows), batch_size):
+        prompts = [row["prompt"] for row in rows[start : start + batch_size]]
+        truncated += sum(
+            length > max_length for length in _token_lengths(tokenizer, prompts, add_special_tokens)
+        )
+    return truncated / len(rows)
+
+
 def _token_lengths(tokenizer: Any, prompts: list[str], add_special_tokens: bool) -> list[int]:
     encoded = tokenizer(
         prompts,

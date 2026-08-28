@@ -28,6 +28,8 @@ def prepare_dataset(config: dict[str, Any], tracker: Any) -> Path:
         validation_size=sampling["validation_size"],
         seeds=config["data_seeds"],
         prompt_field=dataset["prompt_field"],
+        prompt_template=dataset.get("prompt_template"),
+        prompt_fields=dataset.get("prompt_fields"),
         label_field=dataset["label_field"],
         positive_label=dataset["positive_label"],
         negative_label=dataset["negative_label"],

@@ -6,13 +6,17 @@ import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from pathlib import Path
+from string import Formatter
 from typing import Any, TypedDict
 
+from core.config import ConfigError
 from core.reproducibility import is_pinned_hf_revision
 
 
 class CleanRowFields(TypedDict):
-    prompt_field: str
+    prompt_field: str | None
+    prompt_template: str | None
+    prompt_fields: tuple[str, ...]
     label_field: str
     positive_label: Any
     negative_label: Any
@@ -84,14 +88,38 @@ def normalize_prompt(prompt: str) -> str:
     return " ".join(normalized.split()).casefold()
 
 
+def validate_prompt_configuration(dataset: Mapping[str, Any]) -> None:
+    field = dataset.get("prompt_field")
+    template = dataset.get("prompt_template")
+    fields = dataset.get("prompt_fields")
+    if template is None:
+        if not isinstance(field, str) or not field:
+            raise ConfigError("Datasets require a prompt_field or prompt_template.")
+        return
+    if field is not None or not isinstance(template, str) or not template.strip():
+        raise ConfigError("Templated prompts require prompt_field: null and a non-empty template.")
+    if (
+        not isinstance(fields, list)
+        or not fields
+        or any(not isinstance(name, str) or not name for name in fields)
+        or len(fields) != len(set(fields))
+    ):
+        raise ConfigError("Templated prompts require unique non-empty prompt_fields.")
+    placeholders = {name for _, name, _, _ in Formatter().parse(template) if name is not None}
+    if placeholders != set(fields):
+        raise ConfigError("Prompt template placeholders must exactly match prompt_fields.")
+
+
 def clean_rows(
     rows: Iterable[Mapping[str, Any]],
     *,
-    prompt_field: str,
+    prompt_field: str | None,
     label_field: str,
     positive_label: Any,
     negative_label: Any,
     adversarial_field: str | None,
+    prompt_template: str | None = None,
+    prompt_fields: tuple[str, ...] = (),
     reserved_digests: set[str] | None = None,
     audit: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
@@ -102,7 +130,7 @@ def clean_rows(
 
     for row_id, row in enumerate(rows):
         counts["input_rows"] = counts.get("input_rows", 0) + 1
-        prompt = row.get(prompt_field)
+        prompt = _render_prompt(row, prompt_field, prompt_template, prompt_fields)
         label = row.get(label_field)
         if not isinstance(prompt, str) or not prompt.strip():
             counts["invalid_prompt"] = counts.get("invalid_prompt", 0) + 1
@@ -153,11 +181,13 @@ def prepare_splits(
     train_size: int,
     validation_size: int,
     seeds: list[int],
-    prompt_field: str,
+    prompt_field: str | None,
     label_field: str,
     positive_label: Any,
     negative_label: Any,
     adversarial_field: str | None,
+    prompt_template: str | None = None,
+    prompt_fields: list[str] | None = None,
 ) -> tuple[
     list[dict[str, Any]],
     dict[int, dict[str, list[dict[str, Any]]]],
@@ -165,6 +195,8 @@ def prepare_splits(
 ]:
     common: CleanRowFields = {
         "prompt_field": prompt_field,
+        "prompt_template": prompt_template,
+        "prompt_fields": tuple(prompt_fields or ()),
         "label_field": label_field,
         "positive_label": positive_label,
         "negative_label": negative_label,
@@ -189,6 +221,20 @@ def prepare_splits(
         validation = _balanced_sample(remaining, validation_size, rng)
         seed_splits[seed] = {"train": selected_train, "validation": validation}
     return test, seed_splits, audit
+
+
+def _render_prompt(
+    row: Mapping[str, Any],
+    field: str | None,
+    template: str | None,
+    fields: tuple[str, ...],
+) -> Any:
+    if template is None:
+        return row.get(field) if field is not None else None
+    values = {name: row.get(name) for name in fields}
+    if any(not isinstance(value, str) or not value.strip() for value in values.values()):
+        return None
+    return template.format_map(values)
 
 
 def balanced_subset(rows: list[dict[str, Any]], size: int, seed: int) -> list[dict[str, Any]]:

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from core.constants import HF_TOKEN_ENVIRONMENTS
+from probe_transfer.alignment.cross_task import fit_material_entries, fit_material_root
 from probe_transfer.layout import (
     activation_prefix,
     artifact_uri,
@@ -24,13 +25,14 @@ def materialize_activations(
 
 
 def materialize_fit_activations(config: dict[str, Any], destination: Path) -> None:
-    fit = config["fit_materials"]
-    for model in config["models"]:
-        _sync_public(
-            config,
-            activation_prefix(config, model, dataset_key=fit["dataset_key"]),
-            destination / "activations" / model,
-        )
+    for fit in fit_material_entries(config):
+        root = fit_material_root(config, destination, fit)
+        for model in config["models"]:
+            _sync_public(
+                config,
+                activation_prefix(config, model, dataset_key=fit["dataset_key"]),
+                root / "activations" / model,
+            )
 
 
 def materialize_recovery_reference(config: dict[str, Any], destination: Path) -> Path:

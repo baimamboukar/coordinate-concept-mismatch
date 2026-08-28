@@ -7,6 +7,7 @@ from core.constants import HF_BUCKET
 from pipeline.sweep_validation import validate_probe_sensitivity
 from probe_transfer.alignment.cross_task import validate_cross_task_alignment
 from probe_transfer.alignment.materials import direction_groups
+from probe_transfer.data import validate_prompt_configuration
 from probe_transfer.extraction.sites import (
     ACTIVATION_SITES,
     ATTENTION_OUTPUT,
@@ -21,6 +22,7 @@ SCALE_VARIANT = re.compile(r"^[a-z][a-z0-9_]*$")
 
 def validate_stage(config: dict[str, Any]) -> None:
     _validate_artifacts(config)
+    validate_prompt_configuration(config.get("dataset", {}))
     if config.get("training") and not config.get("tracking", {}).get("wandb"):
         raise ConfigError("Training stages must enable W&B tracking.")
     stage = config["stage"]

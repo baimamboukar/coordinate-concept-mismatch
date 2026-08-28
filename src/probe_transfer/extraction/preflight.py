@@ -6,7 +6,11 @@ from typing import Any
 
 import torch
 
-from probe_transfer.extraction.activations import assert_repeatable, save_activation_file
+from probe_transfer.extraction.activations import (
+    assert_repeatable,
+    prompt_truncation_rate,
+    save_activation_file,
+)
 from probe_transfer.extraction.job import (
     ROWS_ENV,
     STAGING_ENV,
@@ -48,6 +52,19 @@ def run_extraction_preflight(
             layers=model_config["layers"],
             hidden_size=model_config["hidden_size"],
         )
+        activations = config["activations"]
+        rates = {
+            split.name: prompt_truncation_rate(
+                rows,
+                tokenizer,
+                max_length=activations["max_length"],
+                add_special_tokens=activations.get("add_special_tokens", True),
+            )
+            for split, rows in prepared
+        }
+        limit = float(activations["max_truncation_rate"])
+        if any(rate > limit for rate in rates.values()):
+            raise ValueError(f"Full-split prompt truncation exceeds {limit:.2%}: {rates}")
         rows = prepared[0][1][: config["extraction"]["repeatability_rows"]]
         tensors, stats = extract_rows(rows, tokenizer, model, model_config, config["activations"])
         repeated, _ = extract_rows(rows, tokenizer, model, model_config, config["activations"])
@@ -73,6 +90,7 @@ def run_extraction_preflight(
             "preflight/rows": float(stats.rows),
             "preflight/free_disk_gb": free_gb,
             "preflight/gpu_memory_gb": runtime["memory_gb"],
+            "preflight/max_truncation_rate": max(rates.values()),
         }
     )
 

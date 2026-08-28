@@ -1,11 +1,14 @@
 import json
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from probe_transfer.alignment.cross_task import (
     add_improvement_retention,
+    load_fit_split,
     load_recovery_reference,
+    validate_cross_task_alignment,
 )
 
 
@@ -52,3 +55,60 @@ def test_cross_task_recovery_rejects_a_different_baseline(tmp_path: Path) -> Non
             load_recovery_reference(path),
             tolerance=1e-5,
         )
+
+
+def test_pooled_fit_concatenates_equal_task_budgets(tmp_path: Path, monkeypatch) -> None:
+    config = {
+        "materials": {"expected_train_rows": 4},
+        "fit_materials": {
+            "expected_train_rows": 4,
+            "task_balanced": True,
+            "datasets": [
+                {"dataset_key": "first-v1", "expected_train_rows": 6, "fit_rows": 2},
+                {"dataset_key": "second-v1", "expected_train_rows": 6, "fit_rows": 2},
+            ],
+        },
+    }
+
+    def fake_split(root, *_args):
+        offset = 0 if root.name == "first-v1" else 10
+        values = np.arange(6) + offset
+        return values[:, None], values[:, None], values, values % 2
+
+    monkeypatch.setattr("probe_transfer.alignment.cross_task.paired_split", fake_split)
+    values = load_fit_split(tmp_path, config, "source", "target", "seed_42_train", "layer_75")
+
+    assert values[0][:, 0].tolist() == [0, 1, 10, 11]
+    assert all(len(item) == 4 for item in values)
+
+
+def test_task_balanced_fit_rejects_unequal_rows() -> None:
+    config = {
+        "artifacts": {"dataset_key": "boolq-v1"},
+        "fit_materials": {
+            "expected_train_rows": 6,
+            "task_balanced": True,
+            "datasets": [
+                {
+                    "dataset_key": "sst2-v1",
+                    "source_study": "sst2",
+                    "expected_train_rows": 10,
+                    "fit_rows": 2,
+                },
+                {
+                    "dataset_key": "wildguard-v1",
+                    "source_study": "wildguard",
+                    "expected_train_rows": 10,
+                    "fit_rows": 4,
+                },
+            ],
+        },
+        "reference_materials": {
+            "source_name": "alignment",
+            "source_study": "boolq",
+            "source_variant": "same-task",
+        },
+    }
+
+    with pytest.raises(ValueError, match="equal rows"):
+        validate_cross_task_alignment(config)

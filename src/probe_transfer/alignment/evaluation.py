@@ -4,10 +4,7 @@ from typing import Any, TextIO
 
 import numpy as np
 
-from probe_transfer.alignment.cross_task import (
-    add_improvement_retention,
-    load_recovery_reference,
-)
+from probe_transfer.alignment import cross_task
 from probe_transfer.alignment.materials import (
     assert_references,
     direction_groups,
@@ -54,20 +51,21 @@ def evaluate_checkpoint_alignment(
     prediction_path.parent.mkdir(parents=True, exist_ok=True)
     comparison_index = 0
     materials = config["materials"]
-    fit_materials = config.get("fit_materials", materials)
     fit_root = fit_root or baseline_dir
-    recovery_reference = load_recovery_reference(reference_path)
+    recovery_reference = cross_task.load_recovery_reference(reference_path)
     with prediction_path.open("w") as prediction_file:
         for data_seed in config["data_seeds"]:
             for source, target, pair_group in direction_groups(config):
                 for depth in alignment["depths"]:
                     layer = layer_key(depth)
-                    train = paired_split(fit_root, source, target, f"seed_{data_seed}_train", layer)
+                    train = cross_task.load_fit_split(
+                        fit_root, config, source, target, f"seed_{data_seed}_train", layer
+                    )
                     validation = paired_split(
                         baseline_dir, source, target, f"seed_{data_seed}_validation", layer
                     )
                     test = paired_split(baseline_dir, source, target, "test", layer)
-                    _assert_row_count(train, fit_materials["expected_train_rows"], "fit train")
+                    _assert_row_count(train, cross_task.fit_expected_rows(config), "fit train")
                     _assert_row_count(
                         validation, materials["expected_validation_rows"], "validation"
                     )
@@ -213,7 +211,7 @@ def evaluate_checkpoint_alignment(
                                 config["seed"] + comparison_index,
                             )
                             recoveries.append(
-                                add_improvement_retention(
+                                cross_task.add_improvement_retention(
                                     recovery,
                                     recovery_reference,
                                     tolerance=config["evaluation"]["reference_auroc_atol"],

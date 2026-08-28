@@ -8,6 +8,7 @@ from probe_transfer.data import (
     load_prepared_rows,
     normalize_prompt,
     prepare_splits,
+    validate_prompt_configuration,
 )
 
 
@@ -116,3 +117,39 @@ def test_splits_accept_numeric_labels_without_a_stratification_field() -> None:
     assert {row["label"] for row in protected} == {0, 1}
     assert sum(row["label"] for row in seeded[42]["train"]) == 6
     assert all(row["adversarial"] is None for row in seeded[42]["train"])
+
+
+def test_splits_render_a_composed_prompt() -> None:
+    rows = [
+        {"question": f"question {label} {index}", "passage": "evidence", "answer": label}
+        for label in (False, True)
+        for index in range(8)
+    ]
+    protected, seeded, _ = prepare_splits(
+        rows,
+        rows[:2],
+        train_size=8,
+        validation_size=2,
+        seeds=[42],
+        prompt_field=None,
+        prompt_template="Question: {question}\nPassage: {passage}",
+        prompt_fields=["question", "passage"],
+        label_field="answer",
+        positive_label=True,
+        negative_label=False,
+        adversarial_field=None,
+    )
+
+    assert protected[0]["prompt"].startswith("Question: ")
+    assert all("\nPassage: evidence" in row["prompt"] for row in seeded[42]["train"])
+
+
+def test_prompt_template_fields_must_match() -> None:
+    with pytest.raises(ValueError, match="exactly match"):
+        validate_prompt_configuration(
+            {
+                "prompt_field": None,
+                "prompt_template": "Question: {question}",
+                "prompt_fields": ["question", "passage"],
+            }
+        )

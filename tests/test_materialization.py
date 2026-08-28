@@ -120,6 +120,34 @@ def test_cross_task_fit_uses_the_configured_activation_dataset(tmp_path: Path, m
     assert all("wildguardmix-v1" not in command for command in commands)
 
 
+def test_pooled_fit_materializes_each_dataset_separately(tmp_path: Path, monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr("probe_transfer.materialization.shutil.which", lambda _name: "/usr/bin/hf")
+    monkeypatch.setattr(
+        "probe_transfer.materialization.subprocess.run",
+        lambda command, **kwargs: calls.append(command),
+    )
+    config = {
+        "artifacts": {"bucket": "test/project", "dataset_key": "boolq-v1"},
+        "fit_materials": {
+            "datasets": [
+                {"dataset_key": "sst2-v1"},
+                {"dataset_key": "wildguard-v1"},
+            ]
+        },
+        "models": {"ai2": {"artifact_key": "ai2"}, "amd": {"artifact_key": "amd"}},
+    }
+
+    materialize_fit_activations(config, tmp_path)
+
+    assert len(calls) == 4
+    commands = [" ".join(command) for command in calls]
+    assert any("activations/sst2-v1" in command for command in commands)
+    assert any("activations/wildguard-v1" in command for command in commands)
+    assert (tmp_path / "sst2-v1" / "activations").is_dir()
+    assert (tmp_path / "wildguard-v1" / "activations").is_dir()
+
+
 def test_cross_task_reference_materializes_only_recovery_rows(tmp_path: Path, monkeypatch) -> None:
     calls = []
     monkeypatch.setattr("probe_transfer.materialization.shutil.which", lambda _name: "/usr/bin/hf")
