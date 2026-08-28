@@ -107,7 +107,7 @@ def assert_repeatable(
 ) -> None:
     for key in reference:
         expected = reference[key][:rows]
-        actual = repeated[key]
+        actual = repeated[key][:rows]
         if key.startswith("layer_"):
             torch.testing.assert_close(actual, expected, rtol=0.0, atol=atol)
         elif not torch.equal(actual, expected):

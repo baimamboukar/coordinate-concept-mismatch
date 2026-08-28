@@ -194,6 +194,30 @@ def test_failed_extraction_leaves_no_partial_model_directory(tmp_path: Path) -> 
     assert not list(activation_root.glob(".llama-*"))
 
 
+def test_repeatability_replays_the_original_batch_shape(tmp_path: Path) -> None:
+    rows_dir = tmp_path / "rows"
+    output_dir = tmp_path / "staged"
+    _prepared_data(rows_dir)
+
+    class BatchRecordingModel(FakeModel):
+        def __init__(self) -> None:
+            super().__init__()
+            self.batch_sizes = []
+
+        def forward(self, input_ids, attention_mask, **kwargs):
+            self.batch_sizes.append(len(input_ids))
+            return super().forward(input_ids, attention_mask, **kwargs)
+
+    model = BatchRecordingModel()
+    run_extraction_job(
+        _config(rows_dir, output_dir),
+        model_name="llama",
+        model_loader=lambda *_args, **_kwargs: (FakeTokenizer(), model),
+    )
+
+    assert model.batch_sizes == [2] * 10
+
+
 def test_runner_selects_one_enabled_model(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config = _config(tmp_path / "rows", tmp_path / "output")
     completion = SimpleNamespace(splits=(SimpleNamespace(rows=10, truncated_rows=1),))

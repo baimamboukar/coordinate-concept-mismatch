@@ -74,8 +74,10 @@ def run_extraction_job(
                 input_path = prepared_root / split.input_name
                 tensors, stats = extract_rows(rows, tokenizer, model, model_config, activations)
                 _assert_truncation(stats, float(activations["max_truncation_rate"]), input_path)
+                repeat_rows = config["extraction"]["repeatability_rows"]
+                replay_rows = min(len(rows), max(repeat_rows, activations["batch_size"]))
                 repeated, _ = extract_rows(
-                    rows[: config["extraction"]["repeatability_rows"]],
+                    rows[:replay_rows],
                     tokenizer,
                     model,
                     model_config,
@@ -84,7 +86,7 @@ def run_extraction_job(
                 assert_repeatable(
                     tensors,
                     repeated,
-                    rows=config["extraction"]["repeatability_rows"],
+                    rows=repeat_rows,
                     atol=config["extraction"]["repeatability_atol"],
                 )
                 output_path = working_output / split.output_name
