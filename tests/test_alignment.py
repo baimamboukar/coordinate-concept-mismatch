@@ -49,3 +49,24 @@ def test_procrustes_and_ridge_generalize_better_than_shuffled_pairing() -> None:
     assert procrustes_error < 1e-8
     assert ridge_error < 1e-8
     assert shuffled_error > 0.1
+
+
+def test_alignment_fit_skips_unselected_methods(monkeypatch) -> None:
+    rng = np.random.default_rng(42)
+    source = rng.normal(size=(64, 4)).astype(np.float32)
+    target = rng.normal(size=(64, 4)).astype(np.float32)
+
+    def reject_assignment(*_args, **_kwargs):
+        raise AssertionError("Permutation fitting must not run.")
+
+    monkeypatch.setattr("probe_transfer.alignment.methods.linear_sum_assignment", reject_assignment)
+    maps = fit_ambient_alignments(
+        source,
+        target,
+        relative_alpha=1e-6,
+        shuffle_seed=314,
+        device="cpu",
+        methods=["affine_ridge", "shuffled_affine_ridge"],
+    )
+
+    assert set(maps) == {"affine_ridge", "shuffled_affine_ridge"}

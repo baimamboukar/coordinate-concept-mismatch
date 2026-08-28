@@ -39,58 +39,80 @@ def fit_ambient_alignments(
     relative_alpha: float,
     shuffle_seed: int,
     device: str,
+    methods: list[str] | None = None,
 ) -> dict[str, AlignmentMap]:
     source_values, target_values = _paired_tensors(source, target, device)
-    permutation = _fit_permutation(source_values, target_values)
+    available = {
+        "permutation",
+        "permutation_diagonal",
+        "orthogonal_procrustes",
+        "affine_ridge",
+        "shuffled_affine_ridge",
+    }
+    selected = available if methods is None else set(methods)
+    if selected - available:
+        raise ValueError("Unsupported ambient alignment method requested.")
+    fitted = {}
+    if selected & {"permutation", "permutation_diagonal"}:
+        permutation = _fit_permutation(source_values, target_values)
+        if "permutation" in selected:
+            fitted[permutation.method] = permutation
+        if "permutation_diagonal" in selected:
+            fitted["permutation_diagonal"] = _fit_permutation_diagonal(
+                source_values, target_values, permutation
+            )
+    if "orthogonal_procrustes" in selected:
+        fitted["orthogonal_procrustes"] = _fit_procrustes(source_values, target_values)
+    if "affine_ridge" in selected:
+        fitted["affine_ridge"] = fit_affine_ridge(
+            source_values,
+            target_values,
+            relative_alpha=relative_alpha,
+            method="affine_ridge",
+        )
+    if "shuffled_affine_ridge" in selected:
+        order = torch.randperm(
+            len(source_values), generator=torch.Generator().manual_seed(shuffle_seed)
+        ).to(source_values.device)
+        fitted["shuffled_affine_ridge"] = fit_affine_ridge(
+            source_values.index_select(0, order),
+            target_values,
+            relative_alpha=relative_alpha,
+            method="shuffled_affine_ridge",
+        )
+    return fitted
+
+
+def _fit_permutation_diagonal(
+    source: torch.Tensor, target: torch.Tensor, permutation: AlignmentMap
+) -> AlignmentMap:
     indices = permutation.indices
     if indices is None:
         raise RuntimeError("Fitted permutation is missing feature indices.")
-    matched = target_values.index_select(1, indices)
-    source_mean = source_values.mean(dim=0)
+    matched = target.index_select(1, indices)
+    source_mean = source.mean(dim=0)
     target_mean = matched.mean(dim=0)
     centered_target = matched - target_mean
-    covariance = (centered_target * (source_values - source_mean)).mean(dim=0)
+    covariance = (centered_target * (source - source_mean)).mean(dim=0)
     variance = centered_target.square().mean(dim=0).clamp_min(1e-8)
     scale = (covariance / variance).clamp_min(1e-8)
-
-    diagonal = AlignmentMap(
+    return AlignmentMap(
         "permutation_diagonal",
         indices=indices,
         scale=scale,
         offset=source_mean - target_mean * scale,
         metadata=dict(permutation.metadata),
     )
-    procrustes = _fit_procrustes(source_values, target_values)
-    ridge = fit_affine_ridge(
-        source_values,
-        target_values,
-        relative_alpha=relative_alpha,
-        method="affine_ridge",
-    )
-    order = torch.randperm(
-        len(source_values), generator=torch.Generator().manual_seed(shuffle_seed)
-    ).to(source_values.device)
-    shuffled = fit_affine_ridge(
-        source_values.index_select(0, order),
-        target_values,
-        relative_alpha=relative_alpha,
-        method="shuffled_affine_ridge",
-    )
-    return {item.method: item for item in (permutation, diagonal, procrustes, ridge, shuffled)}
 
 
 def fit_permutation_alignment(
-    source: np.ndarray,
-    target: np.ndarray,
-    *,
-    device: str,
+    source: np.ndarray, target: np.ndarray, *, device: str
 ) -> AlignmentMap:
     source_values, target_values = _paired_tensors(source, target, device)
     return _fit_permutation(source_values, target_values)
 
 
 def fit_exact_permutation_alignment(source: np.ndarray, target: np.ndarray) -> AlignmentMap:
-    """Recover an exact feature permutation from paired, label-free activations."""
     source_values = np.asarray(source)
     target_values = np.asarray(target)
     if (
@@ -99,7 +121,6 @@ def fit_exact_permutation_alignment(source: np.ndarray, target: np.ndarray) -> A
         or len(source_values) < 2
     ):
         raise ValueError("Alignment requires paired two-dimensional arrays of equal shape.")
-
     target_signatures: dict[bytes, list[int]] = {}
     for index in range(target_values.shape[1]):
         signature = _column_signature(target_values[:, index])
@@ -121,7 +142,6 @@ def fit_exact_permutation_alignment(source: np.ndarray, target: np.ndarray) -> A
             raise ValueError("Paired activations are not related by an exact feature permutation.")
         candidates.remove(match)
         indices.append(match)
-
     if any(target_signatures.values()):
         raise ValueError("Exact activation matching did not produce a bijection.")
     return AlignmentMap(
@@ -137,7 +157,6 @@ def fit_exact_permutation_alignment(source: np.ndarray, target: np.ndarray) -> A
 def fit_positive_diagonal_alignment(
     source: np.ndarray, target: np.ndarray, *, relative_tolerance: float
 ) -> AlignmentMap:
-    """Fit a label-free positive diagonal map from target coordinates to source."""
     if relative_tolerance <= 0:
         raise ValueError("Positive-diagonal fit tolerance must be positive.")
     source_values = np.asarray(source, dtype=np.float64)
@@ -148,7 +167,6 @@ def fit_positive_diagonal_alignment(
         or len(source_values) < 2
     ):
         raise ValueError("Alignment requires paired two-dimensional arrays of equal shape.")
-
     denominator = np.sum(target_values * target_values, axis=0)
     if np.any(denominator <= np.finfo(np.float64).tiny):
         raise ValueError("Positive-diagonal alignment contains an unidentifiable feature.")

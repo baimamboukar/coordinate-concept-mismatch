@@ -90,18 +90,19 @@ def evaluate_checkpoint_alignment(
                             (family, source_probe, raw_scores, oracle_scores, expected)
                         )
 
-                    maps = fit_ambient_alignments(
+                    selected_methods = [
+                        name
+                        for name in [*alignment["methods"], alignment["negative_control"]]
+                        if name != "quotient_ridge"
+                    ]
+                    selected_maps = fit_ambient_alignments(
                         train[0],
                         train[1],
                         relative_alpha=alignment["ridge_relative_alpha"],
                         shuffle_seed=alignment["shuffled_pairing_seed"] + comparison_index,
                         device=device,
+                        methods=selected_methods,
                     )
-                    selected_maps = {
-                        name: maps[name]
-                        for name in [*alignment["methods"], alignment["negative_control"]]
-                        if name != "quotient_ridge"
-                    }
                     aligned_test = {
                         name: fitted.transform(test[1]) for name, fitted in selected_maps.items()
                     }
@@ -118,30 +119,32 @@ def evaluate_checkpoint_alignment(
                         )
                     )
 
-                    quotient_basis_values, quotient_metadata = quotient_basis(
-                        bundles, config["data_seeds"], source, layer, alignment
-                    )
-                    quotient = fit_quotient_alignment(
-                        train[0],
-                        train[1],
-                        quotient_basis_values,
-                        relative_alpha=alignment["ridge_relative_alpha"],
-                        device=device,
-                    )
-                    quotient_test = quotient.transform(test[1])
-                    quotient_expected = validation[0] @ quotient_basis_values.T
-                    diagnostics.append(
-                        {
-                            "data_seed": data_seed,
-                            "depth": depth,
-                            "source_model": source,
-                            "target_model": target,
-                            "pair_group": pair_group,
-                            "method": "quotient_ridge",
-                            **quotient_metadata,
-                            **alignment_diagnostic(quotient, quotient_expected, validation[1]),
-                        }
-                    )
+                    quotient_values = None
+                    if "quotient_ridge" in alignment["methods"]:
+                        quotient_basis_values, quotient_metadata = quotient_basis(
+                            bundles, config["data_seeds"], source, layer, alignment
+                        )
+                        quotient = fit_quotient_alignment(
+                            train[0],
+                            train[1],
+                            quotient_basis_values,
+                            relative_alpha=alignment["ridge_relative_alpha"],
+                            device=device,
+                        )
+                        quotient_values = (quotient.transform(test[1]), quotient_basis_values)
+                        quotient_expected = validation[0] @ quotient_basis_values.T
+                        diagnostics.append(
+                            {
+                                "data_seed": data_seed,
+                                "depth": depth,
+                                "source_model": source,
+                                "target_model": target,
+                                "pair_group": pair_group,
+                                "method": "quotient_ridge",
+                                **quotient_metadata,
+                                **alignment_diagnostic(quotient, quotient_expected, validation[1]),
+                            }
+                        )
 
                     for (
                         family,
@@ -184,9 +187,9 @@ def evaluate_checkpoint_alignment(
                             name: source_probe.scores(values)
                             for name, values in aligned_test.items()
                         }
-                        if family == "linear":
+                        if family == "linear" and quotient_values is not None:
                             method_scores["quotient_ridge"] = quotient_scores(
-                                source_probe, quotient_test, quotient_basis_values
+                                source_probe, *quotient_values
                             )
                         for method, scores in method_scores.items():
                             _record(
