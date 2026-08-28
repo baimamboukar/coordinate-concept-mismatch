@@ -1,9 +1,11 @@
 from collections.abc import Callable, Iterable
 from copy import deepcopy
 from dataclasses import dataclass
+from warnings import catch_warnings, simplefilter
 
 import numpy as np
 import torch
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from torch import nn
@@ -35,6 +37,7 @@ class LinearProbe:
     estimator: LogisticRegression
     validation_auroc: float
     c: float
+    iterations: int
 
     def scores(self, activations: np.ndarray) -> np.ndarray:
         values = self.preprocessor.transform(activations)
@@ -57,16 +60,22 @@ def train_linear_probe(
 
     for c in c_values:
         estimator = LogisticRegression(C=float(c), max_iter=max_iter, solver="lbfgs")
-        estimator.fit(transformed_train, train_y)
+        with catch_warnings(record=True) as warnings:
+            simplefilter("always", ConvergenceWarning)
+            estimator.fit(transformed_train, train_y)
+        if any(issubclass(item.category, ConvergenceWarning) for item in warnings):
+            raise RuntimeError(
+                f"Linear probe with C={float(c)} did not converge within {max_iter} iterations."
+            )
         score = float(
             roc_auc_score(validation_y, estimator.decision_function(transformed_validation))
         )
-        candidates.append((score, -float(c), estimator, float(c)))
+        candidates.append((score, -float(c), estimator, float(c), int(estimator.n_iter_.max())))
 
     if not candidates:
         raise ValueError("At least one linear-probe C value is required.")
-    score, _, estimator, c = max(candidates, key=lambda item: (item[0], item[1]))
-    return LinearProbe(preprocessor, estimator, score, c)
+    score, _, estimator, c, iterations = max(candidates, key=lambda item: (item[0], item[1]))
+    return LinearProbe(preprocessor, estimator, score, c, iterations)
 
 
 class CPDegree2(nn.Module):

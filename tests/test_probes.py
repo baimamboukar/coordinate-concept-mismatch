@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from probe_transfer.probes.models import CPDegree2, FrozenPreprocessor, train_linear_probe
 
@@ -27,6 +28,16 @@ def test_linear_probe_selects_on_source_validation() -> None:
 
     assert probe.validation_auroc == 1.0
     assert probe.scores(validation_x).shape == (4,)
+    assert probe.iterations > 0
+
+
+def test_linear_probe_rejects_nonconverged_candidates() -> None:
+    rng = np.random.default_rng(42)
+    train_x = rng.normal(size=(200, 32))
+    train_y = (train_x[:, 0] + train_x[:, 1] > 0).astype(int)
+
+    with pytest.raises(RuntimeError, match="did not converge"):
+        train_linear_probe(train_x, train_y, train_x, train_y, c_values=[10.0], max_iter=1)
 
 
 def test_cp_parameter_count_matches_affine_completed_formula() -> None:

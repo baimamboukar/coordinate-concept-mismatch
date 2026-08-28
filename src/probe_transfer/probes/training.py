@@ -50,7 +50,7 @@ def fit_probe_family(
             c_values=spec["c_values"],
             max_iter=spec["max_iter"],
         )
-        return ProbeSelection(probe, {"c": probe.c})
+        return ProbeSelection(probe, {"c": probe.c, "iterations": probe.iterations})
     if family not in {"cp_degree_2", "mlp"}:
         raise ValueError(f"Unsupported probe family: {family}")
     return _fit_neural_family(

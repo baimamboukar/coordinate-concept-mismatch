@@ -29,6 +29,7 @@ def test_linear_family_returns_selected_hyperparameter() -> None:
     )
 
     assert selected.parameters["c"] == 0.1
+    assert selected.parameters["iterations"] > 0
 
 
 def test_unknown_probe_family_fails() -> None:
