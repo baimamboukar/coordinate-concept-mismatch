@@ -1,0 +1,36 @@
+extends: olmo1_independent_training_sst2.yaml
+name: olmo1_independent_training_wildguard
+
+dataset:
+  backend: huggingface
+  id: allenai/wildguardmix
+  revision: d29c47f41c8b51348b5c8e8c81c039b3132b66d1
+  train: {subset: wildguardtrain, split: train}
+  test: {subset: wildguardtest, split: test}
+  prompt_field: prompt
+  label_field: prompt_harm_label
+  positive_label: harmful
+  negative_label: unharmful
+  adversarial_field: adversarial
+
+sampling:
+  train_size: 12000
+  validation_size: 2000
+  test_size: 1699
+  balance_labels: true
+  stratify_by: [adversarial]
+  protect_test: true
+
+artifacts:
+  dataset_key: wildguardmix-v1
+
+pipeline:
+  stages:
+    transfer:
+      artifact_variant: wildguard-baseline
+    align:
+      artifact_variant: wildguard-alignment
+      materials:
+        source_study: olmo1_independent_training_wildguard
+        source_variant: wildguard-baseline
+        expected_test_rows: 1699
