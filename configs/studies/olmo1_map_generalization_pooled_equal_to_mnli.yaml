@@ -1,0 +1,24 @@
+extends: olmo1_independent_training_mnli.yaml
+name: olmo1_map_generalization_pooled_equal_to_mnli
+
+pipeline:
+  stages:
+    align:
+      name: olmo1_heldout_map_generalization
+      artifact_variant: pooled-equal-fit-mnli-eval
+      fit_materials:
+        expected_train_rows: 12000
+        task_balanced: true
+        datasets:
+          - dataset_key: sst2-sentiment-v1
+            source_study: olmo1_independent_training_sst2
+            expected_train_rows: 12000
+            fit_rows: 6000
+          - dataset_key: wildguardmix-v1
+            source_study: olmo1_independent_training_wildguard
+            expected_train_rows: 12000
+            fit_rows: 6000
+      reference_materials:
+        source_name: olmo1_independent_alignment
+        source_study: olmo1_independent_training_mnli
+        source_variant: mnli-alignment

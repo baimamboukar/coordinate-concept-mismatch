@@ -1,0 +1,20 @@
+extends: olmo1_independent_training_ag_news.yaml
+name: olmo1_map_generalization_wildguard_to_ag_news
+
+pipeline:
+  stages:
+    align:
+      name: olmo1_heldout_map_generalization
+      artifact_variant: wildguard-fit-ag-news-eval
+      fit_materials:
+        expected_train_rows: 12000
+        task_balanced: false
+        datasets:
+          - dataset_key: wildguardmix-v1
+            source_study: olmo1_independent_training_wildguard
+            expected_train_rows: 12000
+            fit_rows: 12000
+      reference_materials:
+        source_name: olmo1_independent_alignment
+        source_study: olmo1_independent_training_ag_news
+        source_variant: ag-news-alignment

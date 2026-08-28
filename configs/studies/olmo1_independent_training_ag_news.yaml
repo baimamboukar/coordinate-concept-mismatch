@@ -1,0 +1,47 @@
+extends: olmo1_independent_training_sst2.yaml
+name: olmo1_independent_training_ag_news
+
+dataset:
+  backend: huggingface
+  id: fancyzhx/ag_news
+  revision: eb185aade064a813bc0b7f42de02595523103ca4
+  train: {subset: default, split: train}
+  test: {subset: default, split: test}
+  prompt_field: text
+  label_field: label
+  positive_label: 0
+  negative_label: 2
+  adversarial_field: null
+
+sampling:
+  train_size: 12000
+  validation_size: 2000
+  test_size: 3800
+  balance_labels: true
+  stratify_by: []
+  protect_test: true
+
+activations:
+  normalized_depths: [0.75]
+  primary_depth: 0.75
+  batch_size: 16
+
+artifacts:
+  dataset_key: ag-news-world-business-v1
+
+pipeline:
+  stages:
+    transfer:
+      artifact_variant: ag-news-baseline
+    align:
+      artifact_variant: ag-news-alignment
+      materials:
+        source_study: olmo1_independent_training_ag_news
+        source_variant: ag-news-baseline
+        expected_train_rows: 12000
+        expected_validation_rows: 2000
+        expected_test_rows: 3800
+      alignment:
+        primary_method: affine_ridge
+        methods: [affine_ridge, orthogonal_procrustes]
+        depths: [0.75]

@@ -93,3 +93,56 @@ def test_pooled_map_compatibility_varies_budget_and_evaluation_task() -> None:
             "recovery_rows": 36,
             "alignment_diagnostic_rows": 12,
         }
+
+
+def test_heldout_panel_has_pinned_binary_tasks_and_compact_contracts() -> None:
+    cases = {
+        "olmo1_independent_training_ag_news": (3800, 91200, 228000),
+        "olmo1_independent_training_mnli": (6692, 160608, 401520),
+    }
+
+    for name, (test_rows, transfer_predictions, alignment_predictions) in cases.items():
+        study = load_config(CONFIGS_DIR / "studies" / f"{name}.yaml")
+        transfer = materialize_stage(study, "transfer")
+        alignment = materialize_stage(study, "align")
+
+        assert study["sampling"]["test_size"] == test_rows
+        assert len(study["dataset"]["revision"]) == 40
+        assert study["activations"]["normalized_depths"] == [0.75]
+        assert transfer["expected_outputs"] == {
+            "metrics_rows": 24,
+            "prediction_rows": transfer_predictions,
+            "transfer_gap_rows": 12,
+            "probe_bundles": 4,
+        }
+        assert alignment["expected_outputs"] == {
+            "metrics_rows": 60,
+            "prediction_rows": alignment_predictions,
+            "recovery_rows": 36,
+            "alignment_diagnostic_rows": 12,
+        }
+
+
+def test_heldout_panel_map_conditions_fix_coverage_and_budget() -> None:
+    tasks = {
+        "ag_news": ("ag-news-world-business-v1", 228000),
+        "mnli": ("mnli-entailment-contradiction-v1", 401520),
+    }
+    fits = {
+        "sst2": (12000, [12000]),
+        "wildguard": (12000, [12000]),
+        "pooled_equal": (12000, [6000, 6000]),
+        "pooled_full": (24000, [12000, 12000]),
+    }
+
+    for task, (dataset_key, predictions) in tasks.items():
+        for fit, (total, rows) in fits.items():
+            name = f"olmo1_map_generalization_{fit}_to_{task}"
+            config = materialize_stage(
+                load_config(CONFIGS_DIR / "studies" / f"{name}.yaml"), "align"
+            )
+
+            assert config["artifacts"]["dataset_key"] == dataset_key
+            assert config["fit_materials"]["expected_train_rows"] == total
+            assert [entry["fit_rows"] for entry in config["fit_materials"]["datasets"]] == rows
+            assert config["expected_outputs"]["prediction_rows"] == predictions
