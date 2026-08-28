@@ -112,3 +112,61 @@ def test_task_balanced_fit_rejects_unequal_rows() -> None:
 
     with pytest.raises(ValueError, match="equal rows"):
         validate_cross_task_alignment(config)
+
+
+def _fit_entry(dataset_key: str) -> dict:
+    return {
+        "dataset_key": dataset_key,
+        "source_study": dataset_key,
+        "expected_train_rows": 12,
+        "fit_rows": 6,
+    }
+
+
+def _pooled_config(**fit_updates) -> dict:
+    fit = {
+        "expected_train_rows": 12,
+        "task_balanced": True,
+        "datasets": [_fit_entry("sst2-v1"), _fit_entry("wildguard-v1")],
+        **fit_updates,
+    }
+    return {
+        "artifacts": {"dataset_key": "sst2-v1"},
+        "fit_materials": fit,
+        "reference_materials": {
+            "source_name": "alignment",
+            "source_study": "sst2",
+            "source_variant": "same-task",
+        },
+    }
+
+
+def test_pooled_fit_may_include_evaluation_training_rows() -> None:
+    config = _pooled_config(evaluation_included=True)
+
+    validate_cross_task_alignment(config)
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        ({}, "only when evaluation_included is true"),
+        (
+            {"evaluation_included": True, "datasets": [_fit_entry("wildguard-v1")]},
+            "requires the evaluation dataset",
+        ),
+        (
+            {"evaluation_included": True, "datasets": [_fit_entry("sst2-v1")]},
+            "and a distinct fit dataset",
+        ),
+    ],
+)
+def test_pooled_fit_requires_an_explicit_distinct_evaluation_mix(updates, message) -> None:
+    config = _pooled_config()
+    config["fit_materials"].update(updates)
+    config["fit_materials"]["expected_train_rows"] = sum(
+        entry["fit_rows"] for entry in config["fit_materials"]["datasets"]
+    )
+
+    with pytest.raises(ValueError, match=message):
+        validate_cross_task_alignment(config)

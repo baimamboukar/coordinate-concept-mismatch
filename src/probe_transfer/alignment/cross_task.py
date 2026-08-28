@@ -23,11 +23,22 @@ def validate_cross_task_alignment(config: dict[str, Any]) -> None:
     if not entries or len({entry.get("dataset_key") for entry in entries}) != len(entries):
         raise ConfigError("Cross-task fit datasets must be non-empty and unique.")
     evaluation_key = config["artifacts"]["dataset_key"]
+    evaluation_included = fit.get("evaluation_included", False)
+    if not isinstance(evaluation_included, bool):
+        raise ConfigError("evaluation_included must be a boolean.")
+    contains_evaluation = any(entry.get("dataset_key") == evaluation_key for entry in entries)
+    if contains_evaluation and not evaluation_included:
+        raise ConfigError(
+            "Pooled alignment may include the evaluation dataset only when "
+            "evaluation_included is true."
+        )
+    if evaluation_included and (not contains_evaluation or len(entries) < 2):
+        raise ConfigError(
+            "evaluation_included requires the evaluation dataset and a distinct fit dataset."
+        )
     for entry in entries:
         _require_string(entry, "dataset_key", "fit dataset key")
         _require_string(entry, "source_study", "fit source study")
-        if entry["dataset_key"] == evaluation_key:
-            raise ConfigError("Cross-task alignment must fit on a different dataset.")
         available = entry.get("expected_train_rows")
         selected = entry.get("fit_rows", available)
         if (

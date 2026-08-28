@@ -1,0 +1,29 @@
+extends: olmo1_independent_training_sst2.yaml
+name: olmo1_pooled_map_compatibility_equal_sst2
+
+pipeline:
+  stages:
+    align:
+      name: olmo1_pooled_map_compatibility
+      artifact_variant: equal-budget-sst2-eval
+      fit_materials:
+        expected_train_rows: 12000
+        task_balanced: true
+        evaluation_included: true
+        datasets:
+          - dataset_key: sst2-sentiment-v1
+            source_study: olmo1_independent_training_sst2
+            expected_train_rows: 12000
+            fit_rows: 6000
+          - dataset_key: wildguardmix-v1
+            source_study: olmo1_independent_training_wildguard
+            expected_train_rows: 12000
+            fit_rows: 6000
+      reference_materials:
+        source_name: olmo1_independent_alignment
+        source_study: olmo1_independent_training_sst2
+        source_variant: sst2-alignment
+      alignment:
+        primary_method: affine_ridge
+        depths: [0.75]
+        methods: [affine_ridge, orthogonal_procrustes]

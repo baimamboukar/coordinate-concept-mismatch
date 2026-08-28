@@ -66,3 +66,30 @@ def test_heldout_boolq_fits_have_equal_total_budgets() -> None:
     assert [
         [entry["fit_rows"] for entry in config["fit_materials"]["datasets"]] for config in configs
     ] == [[6000], [6000], [3000, 3000]]
+
+
+def test_pooled_map_compatibility_varies_budget_and_evaluation_task() -> None:
+    cases = {
+        "olmo1_pooled_map_compatibility_equal_sst2": (12000, [6000, 6000], 52320),
+        "olmo1_pooled_map_compatibility_equal_wildguard": (12000, [6000, 6000], 101940),
+        "olmo1_pooled_map_compatibility_full_sst2": (24000, [12000, 12000], 52320),
+        "olmo1_pooled_map_compatibility_full_wildguard": (
+            24000,
+            [12000, 12000],
+            101940,
+        ),
+    }
+
+    for name, (total, rows, predictions) in cases.items():
+        config = materialize_stage(load_config(CONFIGS_DIR / "studies" / f"{name}.yaml"), "align")
+
+        assert config["fit_materials"]["evaluation_included"] is True
+        assert config["fit_materials"]["expected_train_rows"] == total
+        assert [entry["fit_rows"] for entry in config["fit_materials"]["datasets"]] == rows
+        assert config["alignment"]["methods"] == ["affine_ridge", "orthogonal_procrustes"]
+        assert config["expected_outputs"] == {
+            "metrics_rows": 60,
+            "prediction_rows": predictions,
+            "recovery_rows": 36,
+            "alignment_diagnostic_rows": 12,
+        }
