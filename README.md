@@ -4,7 +4,7 @@ Research code for disentangling coordinate mismatch from representational differ
 
 The repository has one configuration-driven pipeline. A study YAML selects reusable stages—data preparation, activation preflight and extraction, frozen-probe transfer, activation alignment, or exact-symmetry controls. Adding a model pair or ablation changes configuration; it does not require a new Python runner.
 
-Multi-task panels share one YAML: `--task` selects the evaluation dataset, and `--fit` selects an alignment condition.
+Multi-task panels share one YAML: `--task` selects the evaluation dataset, and `--fit` selects an alignment condition. Cached diagnostic panels support `align --panel`, which checks included-task compatibility before held-out evaluation. Output uses `EXPERIMENT_OUTPUT_DIR` on the worker.
 
 ```bash
 PYTHONHASHSEED=42 uv run python src/run.py \

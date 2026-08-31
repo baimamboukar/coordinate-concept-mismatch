@@ -7,6 +7,7 @@ from core.constants import HF_BUCKET
 from pipeline.sweep_validation import validate_probe_sensitivity
 from probe_transfer.alignment.cross_task import validate_cross_task_alignment
 from probe_transfer.alignment.materials import direction_groups
+from probe_transfer.alignment.selection import validate_alignment_selection
 from probe_transfer.data import validate_prompt_configuration
 from probe_transfer.extraction.sites import (
     ACTIVATION_SITES,
@@ -109,6 +110,7 @@ def _validate_alignment(config: dict[str, Any]) -> None:
         if materials.get(f"expected_{split}_rows") != sampling[f"{split}_size"]:
             raise ConfigError(f"Alignment {split} rows must match the prepared split contract.")
     validate_cross_task_alignment(config)
+    validate_alignment_selection(config)
     direction_groups(config)
 
 

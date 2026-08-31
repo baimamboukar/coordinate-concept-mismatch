@@ -6,6 +6,7 @@ import numpy as np
 
 from probe_transfer.alignment import cross_task
 from probe_transfer.alignment.materials import (
+    ambient_diagnostics,
     assert_references,
     direction_groups,
     families,
@@ -18,12 +19,13 @@ from probe_transfer.alignment.materials import (
     references,
     resolve_device,
 )
-from probe_transfer.alignment.methods import alignment_diagnostic, fit_ambient_alignments
+from probe_transfer.alignment.methods import alignment_diagnostic
 from probe_transfer.alignment.quotient import (
     fit_quotient_alignment,
     quotient_scores,
 )
 from probe_transfer.alignment.recovery import alignment_recovery_record
+from probe_transfer.alignment.selection import fit_configured_alignments
 from probe_transfer.artifacts import sha256_file, write_jsonl
 from probe_transfer.probes.evaluation import (
     binary_metrics,
@@ -47,6 +49,7 @@ def evaluate_checkpoint_alignment(
     metrics: list[dict[str, Any]] = []
     recoveries: list[dict[str, Any]] = []
     diagnostics: list[dict[str, Any]] = []
+    selections: list[dict[str, Any]] = []
     prediction_path = output_dir / "results" / "predictions.jsonl"
     prediction_path.parent.mkdir(parents=True, exist_ok=True)
     comparison_index = 0
@@ -61,11 +64,34 @@ def evaluate_checkpoint_alignment(
                     train = cross_task.load_fit_split(
                         fit_root, config, source, target, f"seed_{data_seed}_train", layer
                     )
+                    _assert_row_count(train, cross_task.fit_expected_rows(config), "fit train")
+                    selected_maps, selection_rows = fit_configured_alignments(
+                        train[0],
+                        train[1],
+                        config,
+                        fit_root,
+                        source=source,
+                        target=target,
+                        data_seed=data_seed,
+                        layer=layer,
+                        shuffle_seed=alignment["shuffled_pairing_seed"] + comparison_index,
+                        device=device,
+                    )
+                    selections.extend(
+                        {
+                            "data_seed": data_seed,
+                            "source_model": source,
+                            "target_model": target,
+                            "depth": depth,
+                            "pair_group": pair_group,
+                            **row,
+                        }
+                        for row in selection_rows
+                    )
                     validation = paired_split(
                         baseline_dir, source, target, f"seed_{data_seed}_validation", layer
                     )
                     test = paired_split(baseline_dir, source, target, "test", layer)
-                    _assert_row_count(train, cross_task.fit_expected_rows(config), "fit train")
                     _assert_row_count(
                         validation, materials["expected_validation_rows"], "validation"
                     )
@@ -90,24 +116,11 @@ def evaluate_checkpoint_alignment(
                             (family, source_probe, raw_scores, oracle_scores, expected)
                         )
 
-                    selected_methods = [
-                        name
-                        for name in [*alignment["methods"], alignment["negative_control"]]
-                        if name != "quotient_ridge"
-                    ]
-                    selected_maps = fit_ambient_alignments(
-                        train[0],
-                        train[1],
-                        relative_alpha=alignment["ridge_relative_alpha"],
-                        shuffle_seed=alignment["shuffled_pairing_seed"] + comparison_index,
-                        device=device,
-                        methods=selected_methods,
-                    )
                     aligned_test = {
                         name: fitted.transform(test[1]) for name, fitted in selected_maps.items()
                     }
                     diagnostics.extend(
-                        _ambient_diagnostics(
+                        ambient_diagnostics(
                             selected_maps,
                             validation[0],
                             validation[1],
@@ -232,6 +245,10 @@ def evaluate_checkpoint_alignment(
             output_dir / "results" / "alignment_diagnostics.jsonl", diagnostics
         ),
     }
+    if alignment.get("fitting") is not None:
+        checksums["results/alignment_selection.jsonl"] = write_jsonl(
+            output_dir / "results" / "alignment_selection.jsonl", selections
+        )
     return recoveries, diagnostics, checksums
 
 
@@ -273,28 +290,3 @@ def _record(
         + "\n"
         for row in prediction_rows(row_ids.tolist(), labels, scores, float(reference["threshold"]))
     )
-
-
-def _ambient_diagnostics(
-    maps: dict[str, Any],
-    source: np.ndarray,
-    target: np.ndarray,
-    seed: int,
-    depth: float,
-    source_model: str,
-    target_model: str,
-    pair_group: str,
-) -> list[dict[str, Any]]:
-    return [
-        {
-            "data_seed": seed,
-            "depth": depth,
-            "source_model": source_model,
-            "target_model": target_model,
-            "pair_group": pair_group,
-            "method": name,
-            **fitted.metadata,
-            **alignment_diagnostic(fitted, source, target),
-        }
-        for name, fitted in maps.items()
-    ]

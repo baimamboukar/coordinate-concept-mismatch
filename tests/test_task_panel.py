@@ -122,3 +122,31 @@ def test_original_single_task_studies_remain_unchanged() -> None:
     assert list(task_variants(study, "align")) == [study]
     with pytest.raises(ConfigError, match="configured task panel"):
         select_task(study, "mnli")
+
+
+def test_compatibility_panel_reuses_original_artifacts_and_counts_candidates() -> None:
+    study = load_config(CONFIGS_DIR / "studies/smollm_shared_map_compatibility.yaml")
+    original = copy.deepcopy(study)
+    variants = list(task_variants(study, "align"))
+    assert len(variants) == 20
+    for task in ("sst2", "wildguard", "ag_news", "mnli"):
+        for fit, candidates in (("uniform_fixed", 1), ("scale_balanced_selected", 5)):
+            config = materialize_stage(select_task(study, task, fit), "align")
+            assert config["materials"]["source_study"] == "smollm_heldout_map_replication"
+            assert config["reference_materials"]["source_name"] == "heldout_map_replication"
+            assert config["reference_materials"]["source_study"] == "smollm_heldout_map_replication"
+            assert config["expected_outputs"]["alignment_selection_rows"] == 16 * candidates
+            assert config["expected_outputs"]["metrics_rows"] == 48
+            assert config["expected_outputs"]["recovery_rows"] == 24
+            assert config["training"] is True
+            assert config["tracking"]["wandb"] is True
+    assert study == original
+    with pytest.raises(ConfigError, match="enabled mappings"):
+        select_task(study, "sst2", "pooled_full")
+
+
+def test_grouped_selection_still_rejects_heldout_fit_data() -> None:
+    study = load_config(CONFIGS_DIR / "studies/smollm_shared_map_compatibility.yaml")
+    study["fit_conditions"]["uniform_fixed"]["datasets"] = {"sst2": 12000, "ag_news": 12000}
+    with pytest.raises(ConfigError, match="Held-out task activations"):
+        select_task(study, "sst2", "uniform_fixed")

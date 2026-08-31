@@ -68,12 +68,23 @@ def _alignment(config: dict[str, Any]) -> dict[str, int]:
     seeds = len(config["data_seeds"])
     metrics = seeds * directions * metrics_per_seed
     diagnostics = seeds * directions * len(alignment["depths"]) * (ambient + int(quotient))
-    return {
+    outputs = {
         "metrics_rows": metrics,
         "prediction_rows": metrics * config["materials"]["expected_test_rows"],
         "recovery_rows": seeds * directions * recoveries_per_seed,
         "alignment_diagnostic_rows": diagnostics,
     }
+    fitting = alignment.get("fitting")
+    if fitting is not None:
+        outputs["alignment_selection_rows"] = (
+            seeds
+            * directions
+            * len(alignment["depths"])
+            * 2
+            * len(fitting["relative_alphas"])
+            * len(config["fit_materials"]["datasets"])
+        )
+    return outputs
 
 
 def _symmetry(config: dict[str, Any]) -> dict[str, int]:

@@ -5,6 +5,8 @@ import numpy as np
 import torch
 from scipy.optimize import linear_sum_assignment
 
+from probe_transfer.alignment.ridge import RidgeSystem
+
 
 @dataclass(frozen=True)
 class AlignmentMap:
@@ -192,22 +194,12 @@ def fit_affine_ridge(
     relative_alpha: float,
     method: str,
 ) -> AlignmentMap:
-    if relative_alpha <= 0:
-        raise ValueError("Relative Ridge alpha must be positive.")
-    source_mean = source.mean(dim=0)
-    target_mean = target.mean(dim=0)
-    source_centered = source - source_mean
-    target_centered = target - target_mean
-    gram = target_centered.T @ target_centered
-    scale = gram.diagonal().mean().clamp_min(torch.finfo(gram.dtype).eps)
-    penalty = relative_alpha * scale
-    regularized = gram + penalty * torch.eye(gram.shape[0], dtype=gram.dtype, device=gram.device)
-    weight = torch.linalg.solve(regularized, target_centered.T @ source_centered)
+    weight, bias, penalty = RidgeSystem.prepare(source, target).solve(relative_alpha)
     return AlignmentMap(
         method,
         weight=weight,
-        bias=source_mean - target_mean @ weight,
-        metadata={"ridge_penalty": float(penalty.item())},
+        bias=bias,
+        metadata={"ridge_penalty": penalty},
     )
 
 

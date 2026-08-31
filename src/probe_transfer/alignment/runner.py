@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -34,6 +35,27 @@ def run_alignment_experiment(
         primary = _primary_recoveries(recoveries, config)
         if not primary:
             raise ValueError("No recovery rows matched the prespecified primary analysis.")
+
+        selection_path = staging / "results" / "alignment_selection.jsonl"
+        if selection_path.is_file():
+            for line in selection_path.read_text().splitlines():
+                row = json.loads(line)
+                if row["selected"]:
+                    prefix = (
+                        f"fitting/{row['source_model']}_to_{row['target_model']}/"
+                        f"seed_{row['data_seed']}/{row['method']}/{row['fit_task']}"
+                    )
+                    tracker.metrics(
+                        {
+                            f"{prefix}/{key}": row[key]
+                            for key in (
+                                "relative_alpha",
+                                "validation_relative_mse",
+                                "sample_weight",
+                                "weighted_train_loss_fraction",
+                            )
+                        }
+                    )
 
         for row in recoveries:
             prefix = (
@@ -86,6 +108,8 @@ def _assert_expected_outputs(output_dir: Path, config: dict[str, Any]) -> None:
         "recovery_rows": output_dir / "results" / "recovery.jsonl",
         "alignment_diagnostic_rows": output_dir / "results" / "alignment_diagnostics.jsonl",
     }
+    if "alignment_selection_rows" in expected:
+        paths["alignment_selection_rows"] = output_dir / "results" / "alignment_selection.jsonl"
     actual = {name: _line_count(path) for name, path in paths.items()}
     mismatches = {
         name: (expected[name], count)

@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from sklearn.metrics import roc_auc_score
 
+from probe_transfer.alignment.methods import AlignmentMap, alignment_diagnostic
 from probe_transfer.alignment.quotient import build_quotient_basis
 from probe_transfer.extraction.activations import load_activation_split
 from probe_transfer.probes.transport import StoredProbe, load_probe_bundle
@@ -150,3 +151,28 @@ def resolve_device(configured: str) -> str:
     if configured == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA alignment was requested but is unavailable.")
     return configured
+
+
+def ambient_diagnostics(
+    maps: dict[str, AlignmentMap],
+    source: np.ndarray,
+    target: np.ndarray,
+    seed: int,
+    depth: float,
+    source_model: str,
+    target_model: str,
+    pair_group: str,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "data_seed": seed,
+            "depth": depth,
+            "source_model": source_model,
+            "target_model": target_model,
+            "pair_group": pair_group,
+            "method": name,
+            **fitted.metadata,
+            **alignment_diagnostic(fitted, source, target),
+        }
+        for name, fitted in maps.items()
+    ]

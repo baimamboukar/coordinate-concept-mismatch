@@ -28,11 +28,24 @@ def select_task(
         raise ConfigError("Panel datasets require exact 40-character commit revisions.")
     configured.update(task=task, task_role=spec["role"], fit_condition=fit or "same_task")
     stages = configured["pipeline"]["stages"]
+    reuse = study.get("reuse_materials", {})
+    if not isinstance(reuse, dict) or set(reuse) - {"study", "transfer", "align"}:
+        raise ConfigError("reuse_materials requires study, transfer, and align names.")
+    if reuse and (
+        set(reuse) != {"study", "transfer", "align"}
+        or any(
+            not isinstance(value, str) or not NAME_PATTERN.fullmatch(value)
+            for value in reuse.values()
+        )
+    ):
+        raise ConfigError("Reused material names must be complete semantic snake_case names.")
     for stage in ("transfer", "align"):
         stages[stage]["artifact_variant"] = f"{task.replace('_', '-')}-{stage}"
     stages["align"]["materials"] = {
-        "source_name": stages["transfer"].get("name", f"{study['name']}_transfer"),
-        "source_study": study["name"],
+        "source_name": reuse.get(
+            "transfer", stages["transfer"].get("name", f"{study['name']}_transfer")
+        ),
+        "source_study": reuse.get("study", study["name"]),
         "source_variant": stages["transfer"]["artifact_variant"],
         **{
             f"expected_{split}_rows": configured["sampling"][f"{split}_size"]
@@ -51,7 +64,12 @@ def task_variants(study: dict[str, Any], stage: str) -> Iterator[dict[str, Any]]
     for task in study["tasks"]:
         yield select_task(study, task)
         if stage == "align":
-            for fit, sources in study.get("fit_conditions", {}).items():
+            for fit, condition in study.get("fit_conditions", {}).items():
+                if condition is None:
+                    continue
+                if not isinstance(condition, dict):
+                    raise ConfigError("Fit conditions must be enabled mappings.")
+                sources = condition.get("datasets", condition)
                 if set(sources) != {task}:
                     yield select_task(study, task, fit)
 
@@ -60,7 +78,13 @@ def _select_fit(study: dict[str, Any], configured: dict[str, Any], task: str, fi
     conditions = study.get("fit_conditions", {})
     if fit not in conditions or not NAME_PATTERN.fullmatch(fit):
         raise ConfigError(f"Unknown panel fit condition: {fit}")
-    sources = conditions[fit]
+    condition = conditions[fit]
+    if not isinstance(condition, dict):
+        raise ConfigError("Fit conditions must be enabled mappings.")
+    sources = condition.get("datasets", condition)
+    fitting = condition.get("fitting") if "datasets" in condition else None
+    if "datasets" in condition and set(condition) - {"datasets", "fitting"}:
+        raise ConfigError("Structured fit conditions support only datasets and fitting.")
     if not isinstance(sources, dict) or not sources or set(sources) == {task}:
         raise ConfigError("Cross-task fits require a distinct fit task.")
     entries = []
@@ -74,15 +98,19 @@ def _select_fit(study: dict[str, Any], configured: dict[str, Any], task: str, fi
         entries.append(
             {
                 "dataset_key": source_config["artifacts"]["dataset_key"],
-                "source_study": study["name"],
+                "source_study": study.get("reuse_materials", {}).get("study", study["name"]),
                 "expected_train_rows": available,
+                "expected_validation_rows": source_config["sampling"]["validation_size"],
                 "fit_rows": rows,
             }
         )
     alignment = configured["pipeline"]["stages"]["align"]
+    reuse = study.get("reuse_materials", {})
+    if fitting is not None:
+        alignment["alignment"] = merge_config(alignment["alignment"], {"fitting": fitting})
     alignment["reference_materials"] = {
-        "source_name": alignment.get("name", f"{study['name']}_align"),
-        "source_study": study["name"],
+        "source_name": reuse.get("align", alignment.get("name", f"{study['name']}_align")),
+        "source_study": reuse.get("study", study["name"]),
         "source_variant": alignment["artifact_variant"],
     }
     alignment["artifact_variant"] = f"{fit.replace('_', '-')}-fit-{task.replace('_', '-')}-eval"

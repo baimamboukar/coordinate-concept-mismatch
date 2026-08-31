@@ -1,0 +1,45 @@
+extends: smollm_heldout_map_replication.yaml
+name: smollm_shared_map_compatibility
+
+execution:
+  alignment_workers: 2
+
+reuse_materials:
+  study: smollm_heldout_map_replication
+  transfer: heldout_map_replication
+  align: heldout_map_replication
+
+fit_conditions:
+  sst2: null
+  wildguard: null
+  pooled_equal: null
+  pooled_full: null
+  uniform_fixed:
+    datasets: {sst2: 12000, wildguard: 12000}
+    fitting: {weighting: uniform, relative_alphas: [0.0001]}
+  scale_balanced_fixed:
+    datasets: {sst2: 12000, wildguard: 12000}
+    fitting: {weighting: source_variance, relative_alphas: [0.0001]}
+  uniform_selected:
+    datasets: {sst2: 12000, wildguard: 12000}
+    fitting:
+      weighting: uniform
+      relative_alphas: [0.000001, 0.00001, 0.0001, 0.001, 0.01]
+  scale_balanced_selected:
+    datasets: {sst2: 12000, wildguard: 12000}
+    fitting:
+      weighting: source_variance
+      relative_alphas: [0.000001, 0.00001, 0.0001, 0.001, 0.01]
+
+decision_rules:
+  primary_condition: scale_balanced_selected
+  heldout_requires_included_compatibility: true
+  interpretation: exploratory_followup
+
+pipeline:
+  stages:
+    align:
+      name: shared_map_compatibility
+      training: true
+      alignment:
+        methods: [affine_ridge]
