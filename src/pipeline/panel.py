@@ -3,6 +3,7 @@ from typing import Any
 
 from core.config import NAME_PATTERN, ConfigError, merge_config
 from core.reproducibility import is_pinned_hf_revision
+from probe_transfer.splits import seeded_split_sizes
 
 
 def select_task(
@@ -13,6 +14,8 @@ def select_task(
         if task is not None or fit is not None:
             raise ConfigError("Task selectors require a configured task panel.")
         return study
+    if isinstance(tasks, dict):
+        tasks = {name: spec for name, spec in tasks.items() if spec is not None}
     if not isinstance(tasks, dict) or task not in tasks:
         raise ConfigError(f"Select --task from the configured panel: {list(tasks or {})}")
     if not isinstance(task, str) or not NAME_PATTERN.fullmatch(task):
@@ -48,8 +51,11 @@ def select_task(
         "source_study": reuse.get("study", study["name"]),
         "source_variant": stages["transfer"]["artifact_variant"],
         **{
-            f"expected_{split}_rows": configured["sampling"][f"{split}_size"]
-            for split in ("train", "validation", "test")
+            f"expected_{split}_rows": size
+            for split, size in {
+                **seeded_split_sizes(configured),
+                "test": configured["sampling"]["test_size"],
+            }.items()
         },
     }
     if fit is not None:
@@ -62,6 +68,8 @@ def task_variants(study: dict[str, Any], stage: str) -> Iterator[dict[str, Any]]
         yield study
         return
     for task in study["tasks"]:
+        if study["tasks"][task] is None:
+            continue
         yield select_task(study, task)
         if stage == "align":
             for fit, condition in study.get("fit_conditions", {}).items():
@@ -83,16 +91,23 @@ def _select_fit(study: dict[str, Any], configured: dict[str, Any], task: str, fi
         raise ConfigError("Fit conditions must be enabled mappings.")
     sources = condition.get("datasets", condition)
     fitting = condition.get("fitting") if "datasets" in condition else None
-    if "datasets" in condition and set(condition) - {"datasets", "fitting"}:
-        raise ConfigError("Structured fit conditions support only datasets and fitting.")
+    if "datasets" in condition and set(condition) - {"datasets", "fitting", "split"}:
+        raise ConfigError("Structured fit conditions support only datasets, fitting, and split.")
     if not isinstance(sources, dict) or not sources or set(sources) == {task}:
         raise ConfigError("Cross-task fits require a distinct fit task.")
     entries = []
+    alignment = configured["pipeline"]["stages"]["align"]
+    split = condition.get("split", alignment["alignment"].get("fit_split", "train"))
+    diagnostic = alignment["alignment"].get("diagnostic_split", "validation")
+    if split not in seeded_split_sizes(configured):
+        raise ConfigError("Panel fitting must select a configured seeded split.")
+    alignment["alignment"]["fit_split"] = split
     for source, rows in sources.items():
         source_config = select_task(study, source)
         if source_config["task_role"] != "fit":
             raise ConfigError("Held-out task activations cannot enter a panel fit condition.")
-        available = source_config["sampling"]["train_size"]
+        sizes = seeded_split_sizes(source_config)
+        available = sizes[split]
         if type(rows) is not int or not 2 <= rows <= available:
             raise ConfigError("Panel fit rows must not exceed available training rows.")
         entries.append(
@@ -100,11 +115,10 @@ def _select_fit(study: dict[str, Any], configured: dict[str, Any], task: str, fi
                 "dataset_key": source_config["artifacts"]["dataset_key"],
                 "source_study": study.get("reuse_materials", {}).get("study", study["name"]),
                 "expected_train_rows": available,
-                "expected_validation_rows": source_config["sampling"]["validation_size"],
+                "expected_validation_rows": sizes[diagnostic],
                 "fit_rows": rows,
             }
         )
-    alignment = configured["pipeline"]["stages"]["align"]
     reuse = study.get("reuse_materials", {})
     if fitting is not None:
         alignment["alignment"] = merge_config(alignment["alignment"], {"fitting": fitting})

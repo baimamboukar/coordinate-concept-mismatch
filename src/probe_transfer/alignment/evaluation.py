@@ -62,7 +62,12 @@ def evaluate_checkpoint_alignment(
                 for depth in alignment["depths"]:
                     layer = layer_key(depth)
                     train = cross_task.load_fit_split(
-                        fit_root, config, source, target, f"seed_{data_seed}_train", layer
+                        fit_root,
+                        config,
+                        source,
+                        target,
+                        f"seed_{data_seed}_{alignment.get('fit_split', 'train')}",
+                        layer,
                     )
                     _assert_row_count(train, cross_task.fit_expected_rows(config), "fit train")
                     selected_maps, selection_rows = fit_configured_alignments(
@@ -88,12 +93,13 @@ def evaluate_checkpoint_alignment(
                         }
                         for row in selection_rows
                     )
+                    diagnostic_split = alignment.get("diagnostic_split", "validation")
                     validation = paired_split(
-                        baseline_dir, source, target, f"seed_{data_seed}_validation", layer
+                        baseline_dir, source, target, f"seed_{data_seed}_{diagnostic_split}", layer
                     )
                     test = paired_split(baseline_dir, source, target, "test", layer)
                     _assert_row_count(
-                        validation, materials["expected_validation_rows"], "validation"
+                        validation, materials[f"expected_{diagnostic_split}_rows"], diagnostic_split
                     )
                     _assert_row_count(test, materials["expected_test_rows"], "test")
                     prepared_probes = []

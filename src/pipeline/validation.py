@@ -16,6 +16,7 @@ from probe_transfer.extraction.sites import (
     RESIDUAL_STREAM,
     activation_width,
 )
+from probe_transfer.splits import seeded_split_sizes, validate_split_configuration
 from probe_transfer.symmetry.protocol import estimated_alignment_enabled, selected_models
 
 SCALE_VARIANT = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -23,6 +24,7 @@ SCALE_VARIANT = re.compile(r"^[a-z][a-z0-9_]*$")
 
 def validate_stage(config: dict[str, Any]) -> None:
     _validate_artifacts(config)
+    validate_split_configuration(config)
     validate_prompt_configuration(config.get("dataset", {}))
     if config.get("training") and not config.get("tracking", {}).get("wandb"):
         raise ConfigError("Training stages must enable W&B tracking.")
@@ -106,6 +108,10 @@ def _validate_alignment(config: dict[str, Any]) -> None:
         raise ConfigError("The configured alignment maps require a shared activation width.")
     materials = config.get("materials", {})
     sampling = config["sampling"]
+    sizes = seeded_split_sizes(config)
+    for key in ("fit_split", "diagnostic_split"):
+        if alignment.get(key, "train" if key == "fit_split" else "validation") not in sizes:
+            raise ConfigError(f"Alignment {key} must name a configured seeded split.")
     for split in ("train", "validation", "test"):
         if materials.get(f"expected_{split}_rows") != sampling[f"{split}_size"]:
             raise ConfigError(f"Alignment {split} rows must match the prepared split contract.")

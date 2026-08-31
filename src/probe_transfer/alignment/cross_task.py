@@ -81,7 +81,10 @@ def fit_material_root(config: dict[str, Any], root: Path, entry: dict[str, Any])
 
 def fit_expected_rows(config: dict[str, Any]) -> int:
     fit = config.get("fit_materials")
-    return config["materials"]["expected_train_rows"] if fit is None else fit["expected_train_rows"]
+    split = config.get("alignment", {}).get("fit_split", "train")
+    return (
+        config["materials"][f"expected_{split}_rows"] if fit is None else fit["expected_train_rows"]
+    )
 
 
 def load_fit_split(

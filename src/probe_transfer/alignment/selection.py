@@ -75,7 +75,8 @@ def fit_configured_alignments(
     validation, sizes = {}, {}
     for entry in fit_material_entries(config):
         root = fit_material_root(config, fit_root, entry)
-        values = paired_split(root, source, target, f"seed_{data_seed}_validation", layer)
+        split = alignment.get("diagnostic_split", "validation")
+        values = paired_split(root, source, target, f"seed_{data_seed}_{split}", layer)
         if any(len(value) != entry["expected_validation_rows"] for value in values):
             raise ValueError("Fitting-task validation rows do not match the contract.")
         name = entry["dataset_key"]

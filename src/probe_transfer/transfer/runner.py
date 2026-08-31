@@ -11,6 +11,7 @@ from core.constants import ACTIVATION_STAGING_ENV
 from core.tracking import Tracker
 from probe_transfer.atomic import publish_directories
 from probe_transfer.extraction.sites import activation_width
+from probe_transfer.splits import seeded_split_sizes
 from probe_transfer.transfer.evaluation import run_transfer
 
 
@@ -51,9 +52,9 @@ def _validate_activations(output_dir: Path, config: dict[str, Any]) -> None:
     expected = {
         "test": sampling["test_size"],
         **{
-            f"seed_{seed}_{split}": sampling[f"{split}_size"]
+            f"seed_{seed}_{split}": size
             for seed in config["data_seeds"]
-            for split in ("train", "validation")
+            for split, size in seeded_split_sizes(config).items()
         },
     }
     layer_keys = [

@@ -11,7 +11,7 @@ from safetensors import safe_open
 from core.constants import ACTIVATION_ROWS_ENV as ROWS_ENV
 from core.constants import ACTIVATION_STAGING_ENV as STAGING_ENV
 from probe_transfer.atomic import atomic_directory
-from probe_transfer.data import load_prepared_rows
+from probe_transfer.data import assert_disjoint_prepared_splits, load_prepared_rows
 from probe_transfer.extraction.activations import (
     ActivationStats,
     assert_repeatable,
@@ -26,6 +26,7 @@ from probe_transfer.extraction.runtime import (
 )
 from probe_transfer.extraction.sites import activation_boundary, activation_width
 from probe_transfer.extraction.types import JobCompletion, PreparedSplit, SplitCompletion
+from probe_transfer.splits import seeded_split_sizes
 
 MODEL_ENV = "EXTRACTION_MODEL"
 ModelLoader = Callable[..., tuple[Any, Any]]
@@ -145,15 +146,8 @@ def prepared_splits(config: Mapping[str, Any]) -> tuple[PreparedSplit, ...]:
     splits = [PreparedSplit("test", sampling["test_size"], False)]
     for seed in config["data_seeds"]:
         splits.extend(
-            (
-                PreparedSplit(f"seed_{seed}_train", sampling["train_size"], True, seed),
-                PreparedSplit(
-                    f"seed_{seed}_validation",
-                    sampling["validation_size"],
-                    True,
-                    seed,
-                ),
-            )
+            PreparedSplit(f"seed_{seed}_{name}", size, True, seed)
+            for name, size in seeded_split_sizes(config).items()
         )
     return tuple(splits)
 
@@ -161,7 +155,7 @@ def prepared_splits(config: Mapping[str, Any]) -> tuple[PreparedSplit, ...]:
 def load_prepared_splits(
     root: Path, splits: tuple[PreparedSplit, ...]
 ) -> list[tuple[PreparedSplit, list[dict[str, Any]]]]:
-    return [
+    prepared = [
         (
             split,
             load_prepared_rows(
@@ -172,6 +166,8 @@ def load_prepared_splits(
         )
         for split in splits
     ]
+    assert_disjoint_prepared_splits({split.name: rows for split, rows in prepared})
+    return prepared
 
 
 def _resolve_path(

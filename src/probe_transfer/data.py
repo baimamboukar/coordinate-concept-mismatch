@@ -3,7 +3,6 @@ import json
 import os
 import random
 import unicodedata
-from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from string import Formatter
@@ -11,6 +10,7 @@ from typing import Any, TypedDict
 
 from core.config import ConfigError
 from core.reproducibility import is_pinned_hf_revision
+from probe_transfer.splits import add_disjoint_calibration, balanced_sample
 
 
 class CleanRowFields(TypedDict):
@@ -188,6 +188,8 @@ def prepare_splits(
     adversarial_field: str | None,
     prompt_template: str | None = None,
     prompt_fields: list[str] | None = None,
+    calibration: Mapping[str, Any] | None = None,
+    fresh_test_size: int | None = None,
 ) -> tuple[
     list[dict[str, Any]],
     dict[int, dict[str, list[dict[str, Any]]]],
@@ -215,11 +217,17 @@ def prepare_splits(
     seed_splits = {}
     for seed in seeds:
         rng = random.Random(seed)
-        selected_train = _balanced_sample(train_pool, train_size, rng)
+        selected_train = balanced_sample(train_pool, train_size, rng)
         selected_ids = {row["prompt_sha256"] for row in selected_train}
         remaining = [row for row in train_pool if row["prompt_sha256"] not in selected_ids]
-        validation = _balanced_sample(remaining, validation_size, rng)
+        validation = balanced_sample(remaining, validation_size, rng)
         seed_splits[seed] = {"train": selected_train, "validation": validation}
+    if calibration is not None:
+        if fresh_test_size is None:
+            raise ValueError("Disjoint calibration requires an explicit fresh test size.")
+        test, seed_splits, audit["partition"] = add_disjoint_calibration(
+            train_pool, seed_splits, settings=calibration, test_size=fresh_test_size
+        )
     return test, seed_splits, audit
 
 
@@ -238,41 +246,24 @@ def _render_prompt(
 
 
 def balanced_subset(rows: list[dict[str, Any]], size: int, seed: int) -> list[dict[str, Any]]:
-    return _balanced_sample(rows, size, random.Random(seed))
+    return balanced_sample(rows, size, random.Random(seed))
 
 
-def _balanced_sample(
-    rows: list[dict[str, Any]], size: int, rng: random.Random
-) -> list[dict[str, Any]]:
-    if size <= 0 or size % 2:
-        raise ValueError("Balanced sample sizes must be positive even integers.")
-
-    selected = []
-    for label in (0, 1):
-        bucket = [row for row in rows if row["label"] == label]
-        selected.extend(_sample_adversarial_strata(bucket, size // 2, rng))
-    rng.shuffle(selected)
-    return selected
-
-
-def _sample_adversarial_strata(
-    rows: list[dict[str, Any]], size: int, rng: random.Random
-) -> list[dict[str, Any]]:
-    if len(rows) < size:
-        raise ValueError(f"Requested {size} rows from a stratum containing {len(rows)}.")
-
-    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in rows:
-        groups[str(row["adversarial"])].append(row)
-
-    exact = {key: size * len(group) / len(rows) for key, group in groups.items()}
-    quotas = {key: int(value) for key, value in exact.items()}
-    remainder = size - sum(quotas.values())
-    order = sorted(groups, key=lambda key: (exact[key] - quotas[key], key), reverse=True)
-    for key in order[:remainder]:
-        quotas[key] += 1
-
-    selected = []
-    for key in sorted(groups):
-        selected.extend(rng.sample(groups[key], quotas[key]))
-    return selected
+def assert_disjoint_prepared_splits(splits: Mapping[str, list[dict[str, Any]]]) -> None:
+    if not any(name.endswith("_calibration") for name in splits):
+        return
+    keys = {
+        name: {normalize_prompt(row["prompt"]) for row in rows} for name, rows in splits.items()
+    }
+    if any(len(keys[name]) != len(rows) for name, rows in splits.items()):
+        raise ValueError("Disjoint partitions contain duplicate normalized prompts.")
+    probe_names = [name for name in keys if "calibration" not in name and name != "test"]
+    used = set().union(*(keys[name] for name in probe_names))
+    fresh = [name for name in keys if "calibration" in name]
+    if any(keys[name] & used for name in ["test", *fresh]):
+        raise ValueError("Fresh calibration or test rows overlap prior probe splits.")
+    if any(keys["test"] & keys[name] for name in fresh):
+        raise ValueError("Fresh test rows overlap calibration splits.")
+    for name in fresh:
+        if name.endswith("_calibration") and keys[name] & keys[f"{name}_validation"]:
+            raise ValueError("Calibration fitting and validation rows overlap.")

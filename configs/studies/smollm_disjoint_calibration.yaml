@@ -1,0 +1,87 @@
+extends: smollm_heldout_map_replication.yaml
+name: smollm_disjoint_calibration
+
+sampling:
+  test_size: 2000
+  disjoint_calibration:
+    train_size: 12000
+    validation_size: 2000
+    holdout_seed: 314
+    evaluation_source: unused_training_pool
+
+execution:
+  alignment_workers: 2
+  prepare_materials: true
+
+reuse_materials:
+  study: smollm_disjoint_calibration
+  transfer: disjoint_calibration
+  align: disjoint_calibration
+
+tasks:
+  sst2:
+    sampling: {test_size: 2000}
+    artifacts:
+      dataset_key: sst2-sentiment-disjoint-v1
+      split_reference: {dataset_key: sst2-sentiment-v1, model: smollm1}
+  wildguard:
+    sampling: {test_size: 2000}
+    artifacts:
+      dataset_key: wildguardmix-disjoint-v1
+      split_reference: {dataset_key: wildguardmix-v1, model: smollm1}
+  ag_news: null
+  mnli: null
+
+fit_conditions:
+  sst2: null
+  wildguard: null
+  pooled_equal: null
+  pooled_full: null
+  overlap_uniform:
+    datasets: {sst2: 12000, wildguard: 12000}
+    split: train
+    fitting: {weighting: uniform, relative_alphas: [0.0001]}
+  disjoint_uniform:
+    datasets: {sst2: 12000, wildguard: 12000}
+    split: calibration
+    fitting: {weighting: uniform, relative_alphas: [0.0001]}
+  overlap_scale_balanced:
+    datasets: {sst2: 12000, wildguard: 12000}
+    split: train
+    fitting: {weighting: source_variance, relative_alphas: [0.0001]}
+  disjoint_scale_balanced:
+    datasets: {sst2: 12000, wildguard: 12000}
+    split: calibration
+    fitting: {weighting: source_variance, relative_alphas: [0.0001]}
+
+decision_rules:
+  primary_condition: disjoint_scale_balanced
+  heldout_requires_included_compatibility: true
+  interpretation: fresh_holdout_calibration_control
+  contrasts:
+    scale_balanced_calibration:
+      reference: overlap_scale_balanced
+      treatment: disjoint_scale_balanced
+      primary: true
+    uniform_calibration:
+      reference: overlap_uniform
+      treatment: disjoint_uniform
+      primary: false
+
+pipeline:
+  stages:
+    prepare:
+      name: disjoint_calibration
+    preflight:
+      name: disjoint_calibration
+    extract:
+      name: disjoint_calibration
+    transfer:
+      name: disjoint_calibration
+    align:
+      name: disjoint_calibration
+      training: true
+      alignment:
+        fit_split: calibration
+        diagnostic_split: calibration_validation
+        methods: [affine_ridge]

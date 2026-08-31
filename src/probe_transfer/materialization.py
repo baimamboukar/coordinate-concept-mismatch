@@ -4,13 +4,47 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+import torch
+from safetensors import safe_open
+
 from core.constants import HF_TOKEN_ENVIRONMENTS
 from probe_transfer.alignment.cross_task import fit_material_entries, fit_material_root
+from probe_transfer.data import load_prepared_rows
 from probe_transfer.layout import (
     activation_prefix,
     artifact_uri,
     study_prefix,
 )
+from probe_transfer.transfer.runner import _validate_metadata
+
+
+def verify_prior_probe_splits(config: dict[str, Any], rows: Path, destination: Path) -> int:
+    reference = config["artifacts"].get("split_reference")
+    if reference is None:
+        return 0
+    model = reference["model"]
+    names = [
+        f"seed_{seed}_{split}" for seed in config["data_seeds"] for split in ("train", "validation")
+    ]
+    _sync_public(
+        config,
+        activation_prefix(config, model, dataset_key=reference["dataset_key"]),
+        destination,
+        include=[f"{name}.safetensors" for name in names],
+    )
+    for name in names:
+        count = config["sampling"][f"{name.rsplit('_', 1)[1]}_size"]
+        prepared = load_prepared_rows(rows / f"{name}.jsonl", count)
+        with safe_open(destination / f"{name}.safetensors", framework="pt", device="cpu") as saved:
+            _validate_metadata(saved.metadata(), config["models"][model], name, count, config)
+            for field, column in (("row_ids", "row_id"), ("labels", "label")):
+                if not torch.equal(
+                    saved.get_tensor(field), torch.tensor([row[column] for row in prepared])
+                ):
+                    raise ValueError(
+                        f"Prior probe {column} order differs from the pinned split: {name}"
+                    )
+    return len(names)
 
 
 def materialize_activations(

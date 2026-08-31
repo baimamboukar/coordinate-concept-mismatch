@@ -7,8 +7,10 @@ from core.config import load_config
 from core.constants import PIPELINE_STAGES, PROJECT_ROOT
 from pipeline.batch import run_alignment_panel
 from pipeline.config import materialize_stage
+from pipeline.materials import validate_material_preparation
 from pipeline.panel import select_task, task_variants
 from pipeline.runner import run_stage
+from probe_transfer.alignment.contrasts import validate_contrasts
 
 
 def main() -> None:
@@ -21,7 +23,7 @@ def main() -> None:
     parser.add_argument(
         "--panel",
         action="store_true",
-        help="Run a cached alignment panel with its compatibility gate.",
+        help="Run an alignment panel, optionally preparing its configured materials first.",
     )
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument(
@@ -44,6 +46,9 @@ def main() -> None:
         parser.error("--panel requires align without task, fit, model, or publish-only selectors.")
     if args.fit is not None and (args.stage != "align" or args.task is None):
         parser.error("--fit requires the align stage and --task.")
+    if args.panel:
+        validate_material_preparation(study)
+        validate_contrasts(study)
     if args.validate_only:
         variants = (
             task_variants(study, args.stage)

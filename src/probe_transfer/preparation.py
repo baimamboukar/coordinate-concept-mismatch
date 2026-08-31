@@ -1,11 +1,16 @@
+import json
 import os
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from probe_transfer.artifacts import write_jsonl
+from probe_transfer.artifacts import write_json, write_jsonl
 from probe_transfer.atomic import atomic_directory
-from probe_transfer.data import load_huggingface_dataset, prepare_splits
+from probe_transfer.data import (
+    assert_disjoint_prepared_splits,
+    load_huggingface_dataset,
+    prepare_splits,
+)
 from probe_transfer.extraction.job import ROWS_ENV
 
 
@@ -34,17 +39,49 @@ def prepare_dataset(config: dict[str, Any], tracker: Any) -> Path:
         positive_label=dataset["positive_label"],
         negative_label=dataset["negative_label"],
         adversarial_field=dataset["adversarial_field"],
+        calibration=sampling.get("disjoint_calibration"),
+        fresh_test_size=sampling["test_size"],
     )
     if len(clean_test) != sampling["test_size"]:
         raise ValueError(
             f"Protected test contract expected {sampling['test_size']} rows, found {len(clean_test)}."
         )
+    if "partition" in audit:
+        assert_disjoint_prepared_splits(
+            {
+                "test": clean_test,
+                **{
+                    f"seed_{seed}_{name}": rows
+                    for seed, splits in seeded.items()
+                    for name, rows in splits.items()
+                },
+            }
+        )
+        audit["partition"]["overlap_rows"] = 0
 
-    with atomic_directory(output) as staging:
-        write_jsonl(staging / "test.jsonl", map(_public_row, clean_test))
-        for seed, splits in seeded.items():
-            for split, rows in splits.items():
-                write_jsonl(staging / f"seed_{seed}_{split}.jsonl", map(_public_row, rows))
+    prepared = {
+        "test": clean_test,
+        **{
+            f"seed_{seed}_{name}": rows
+            for seed, splits in seeded.items()
+            for name, rows in splits.items()
+        },
+    }
+    if output.exists():
+        for name, rows in prepared.items():
+            actual = [
+                json.loads(line) for line in (output / f"{name}.jsonl").read_text().splitlines()
+            ]
+            if actual != [_public_row(row) for row in rows]:
+                raise ValueError(f"Prepared split differs from the pinned recipe: {name}")
+        if "partition" in audit and json.loads((output / "split_audit.json").read_text()) != audit:
+            raise ValueError("Prepared split audit differs from the pinned recipe.")
+    else:
+        with atomic_directory(output) as staging:
+            for name, rows in prepared.items():
+                write_jsonl(staging / f"{name}.jsonl", map(_public_row, rows))
+            if "partition" in audit:
+                write_json(staging / "split_audit.json", audit)
 
     labels = Counter(row["label"] for row in clean_test)
     negative = dataset["negative_label"]

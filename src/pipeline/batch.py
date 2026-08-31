@@ -10,12 +10,16 @@ from typing import Any
 from core.config import ConfigError
 from core.constants import BASELINE_ARTIFACT_ENV, EXPERIMENT_OUTPUT_ENV, PROJECT_ROOT
 from pipeline.config import materialize_stage
+from pipeline.materials import prepare_panel_materials
 from pipeline.panel import select_task
+from probe_transfer.alignment.contrasts import condition_contrasts, validate_contrasts
+from probe_transfer.artifacts import write_jsonl
 from probe_transfer.layout import study_prefix
 from probe_transfer.publication import Publication, publish_artifacts
 
 
 def run_alignment_panel(study: dict[str, Any], path: Path) -> None:
+    validate_contrasts(study)
     if not study.get("reuse_materials") or not study.get("decision_rules", {}).get(
         "heldout_requires_included_compatibility"
     ):
@@ -26,8 +30,10 @@ def run_alignment_panel(study: dict[str, Any], path: Path) -> None:
     root = Path(configured_root).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True)
     conditions = [name for name, value in study["fit_conditions"].items() if value is not None]
-    fit_tasks = [name for name, spec in study["tasks"].items() if spec["role"] == "fit"]
-    held_out = [name for name, spec in study["tasks"].items() if spec["role"] == "held_out"]
+    fit_tasks = [name for name, spec in study["tasks"].items() if spec and spec["role"] == "fit"]
+    held_out = [
+        name for name, spec in study["tasks"].items() if spec and spec["role"] == "held_out"
+    ]
     if len(fit_tasks) < 2 or not conditions:
         raise ConfigError(
             "A compatibility batch requires at least two fitting tasks and conditions."
@@ -38,6 +44,8 @@ def run_alignment_panel(study: dict[str, Any], path: Path) -> None:
     workers = study.get("execution", {}).get("alignment_workers", 1)
     if type(workers) is not int or not 1 <= workers <= len(fit_tasks):
         raise ConfigError("Alignment workers must be bounded by the number of fitting tasks.")
+    if study.get("execution", {}).get("prepare_materials", False):
+        prepare_panel_materials(study, path, root, fit_tasks)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         included = list(
             executor.map(lambda task: _run_task(study, path, root, task, conditions), fit_tasks)
@@ -62,6 +70,10 @@ def run_alignment_panel(study: dict[str, Any], path: Path) -> None:
     }
     results = root / "results"
     results.mkdir(exist_ok=True)
+    contrasts = condition_contrasts(root, study, fit_tasks)
+    if contrasts:
+        write_jsonl(results / "contrasts.jsonl", contrasts)
+        summary["contrast_rows"] = len(contrasts)
     (results / "summary.json").write_text(json.dumps(summary, indent=2, allow_nan=False) + "\n")
     config = materialize_stage(select_task(study, fit_tasks[0], conditions[0]), "align")
     prefix = study_prefix(config["name"], config["study"])

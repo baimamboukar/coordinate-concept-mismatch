@@ -6,7 +6,7 @@ from typing import Any
 from core.constants import BASELINE_ARTIFACT_ENV, EXPERIMENT_OUTPUT_ENV
 from core.tracking import Tracker
 from probe_transfer.alignment.runner import run_alignment_experiment
-from probe_transfer.extraction.job import ROWS_ENV, STAGING_ENV
+from probe_transfer.extraction.job import ROWS_ENV, STAGING_ENV, prepared_splits
 from probe_transfer.extraction.preflight import run_extraction_preflight
 from probe_transfer.extraction.runner import run_model_extraction
 from probe_transfer.layout import activation_prefix, model_artifact_key, stage_prefix
@@ -150,9 +150,7 @@ def _environment_path(name: str) -> Path:
 
 def _ensure_prepared(config: dict[str, Any], tracker: Tracker) -> Path:
     root = _configured_path(config, ROWS_ENV, "rows_dir")
-    expected = [root / "test.jsonl"]
-    for seed in config["data_seeds"]:
-        expected.extend([root / f"seed_{seed}_train.jsonl", root / f"seed_{seed}_validation.jsonl"])
+    expected = [root / split.input_name for split in prepared_splits(config)]
     if all(path.is_file() for path in expected):
         return root
     if root.exists():
