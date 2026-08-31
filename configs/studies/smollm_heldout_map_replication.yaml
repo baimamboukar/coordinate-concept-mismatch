@@ -1,0 +1,185 @@
+extends: ../defaults.yaml
+name: smollm_heldout_map_replication
+
+models:
+  smollm1:
+    backend: huggingface
+    id: HuggingFaceTB/SmolLM-1.7B
+    revision: d7449ff7241c863f3e8accc475155f0f97afa011
+    artifact_key: smollm-1.7b
+    layers: 24
+    hidden_size: 2048
+    role: independent_reference
+  smollm2:
+    backend: huggingface
+    id: HuggingFaceTB/SmolLM2-1.7B-intermediate-checkpoints
+    revision: 4916b26a1d198b4b6ad04b5c381a0f9fb1970aaa
+    artifact_key: smollm2-1.7b-step-5125000
+    layers: 24
+    hidden_size: 2048
+    role: independent_pretraining_replication
+
+tokenizer:
+  backend: huggingface
+  id: HuggingFaceTB/SmolLM-1.7B
+  revision: d7449ff7241c863f3e8accc475155f0f97afa011
+
+model_pair:
+  recipe_revision: a041759883ec7152d18fb985ea49be641a0bceef
+  initialization_seeds: {smollm1: 8, smollm2: 42}
+  pretrained_parent: null
+  architecture:
+    model_type: llama
+    hidden_size: 2048
+    intermediate_size: 8192
+    num_hidden_layers: 24
+    num_attention_heads: 32
+    num_key_value_heads: 32
+    vocab_size: 49152
+    max_position_embeddings: 2048
+    rope_theta: 10000.0
+    rms_norm_eps: 0.00001
+    hidden_act: silu
+    tie_word_embeddings: true
+
+activations:
+  normalized_depths: [0.75]
+  primary_depth: 0.75
+  add_special_tokens: false
+  batch_size: 16
+  dtype: bfloat16
+  storage_dtype: bfloat16
+
+extraction:
+  models: [smollm1, smollm2]
+
+tracking:
+  mode: online
+  local_report: false
+
+tasks:
+  sst2:
+    role: fit
+    dataset:
+      id: stanfordnlp/sst2
+      revision: 8d51e7e4887a4caaa95b3fbebbf53c0490b58bbb
+      train: {subset: null, split: train}
+      test: {subset: null, split: validation}
+      prompt_field: sentence
+      label_field: label
+      positive_label: 1
+      negative_label: 0
+      adversarial_field: null
+    sampling: {test_size: 872, stratify_by: []}
+    artifacts: {dataset_key: sst2-sentiment-v1}
+  wildguard:
+    role: fit
+    artifacts: {dataset_key: wildguardmix-v1}
+  ag_news:
+    role: held_out
+    dataset:
+      id: fancyzhx/ag_news
+      revision: eb185aade064a813bc0b7f42de02595523103ca4
+      train: {subset: default, split: train}
+      test: {subset: default, split: test}
+      prompt_field: text
+      label_field: label
+      positive_label: 0
+      negative_label: 2
+      adversarial_field: null
+    sampling: {test_size: 3800, stratify_by: []}
+    artifacts: {dataset_key: ag-news-world-business-v1}
+  mnli:
+    role: held_out
+    dataset:
+      id: nyu-mll/glue
+      revision: bcdcba79d07bc864c1c254ccfcedcce55bcc9a8c
+      train: {subset: mnli, split: train}
+      test: {subset: mnli, split: validation_matched}
+      prompt_field: null
+      prompt_template: "Premise: {premise}\nHypothesis: {hypothesis}"
+      prompt_fields: [premise, hypothesis]
+      label_field: label
+      positive_label: 0
+      negative_label: 2
+      adversarial_field: null
+    sampling: {test_size: 6692, stratify_by: []}
+    artifacts: {dataset_key: mnli-entailment-contradiction-v1}
+
+fit_conditions:
+  sst2: {sst2: 12000}
+  wildguard: {wildguard: 12000}
+  pooled_equal: {sst2: 6000, wildguard: 6000}
+  pooled_full: {sst2: 12000, wildguard: 12000}
+
+decision_rules:
+  qualification:
+    required_frozen_failures: 4
+    minimum_same_task_median_recovery: 0.75
+    minimum_same_task_substantial: 3
+    maximum_shuffled_substantial: 0
+  pooled_generalization:
+    minimum_median_recovery: 0.50
+    minimum_median_retention: 0.75
+    minimum_substantial: 3
+    maximum_shuffled_substantial: 0
+  pooled_compatibility:
+    minimum_median_recovery: 0.75
+    minimum_median_retention: 0.75
+    minimum_substantial: 3
+    maximum_shuffled_substantial: 0
+  material_budget_gain: 0.10
+
+pipeline:
+  stages:
+    prepare:
+      name: heldout_map_replication
+      tracking: {wandb: false, local_report: false}
+    preflight:
+      name: heldout_map_replication
+      tracking: {wandb: false, local_report: false}
+    extract:
+      name: heldout_map_replication
+      tracking: {wandb: false, local_report: false}
+    transfer:
+      name: heldout_map_replication
+      training: true
+      evaluation:
+        primary_metrics: [auroc, auroc_transfer_gap]
+        pair_groups:
+          primary: [[smollm1, smollm2], [smollm2, smollm1]]
+        oracle_gate: 0.75
+        minimum_gap: 0.10
+    align:
+      name: heldout_map_replication
+      alignment:
+        fit_split: train
+        diagnostic_split: validation
+        primary_depth: 0.75
+        depths: [0.75]
+        primary_probe_family: linear
+        primary_method: affine_ridge
+        methods: [affine_ridge, orthogonal_procrustes]
+        ridge_relative_alpha: 0.0001
+        negative_control: shuffled_affine_ridge
+        shuffled_pairing_seed: 314
+        device: cuda
+      evaluation:
+        primary_metrics:
+          - aligned_auroc_improvement
+          - recovery_fraction
+          - residual_auroc_gap
+        additional_metrics:
+          - auroc
+          - improvement_retention
+          - alignment_relative_rmse
+          - alignment_mean_cosine
+          - negative_control_results
+        primary_pair_group: primary
+        pair_groups:
+          primary: [[smollm1, smollm2], [smollm2, smollm1]]
+        oracle_gate: 0.75
+        minimum_raw_gap: 0.10
+        minimum_improvement: 0.05
+        minimum_recovery: 0.50
+        reference_auroc_atol: 0.00001

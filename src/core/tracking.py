@@ -32,7 +32,13 @@ class Tracker:
         if wandb_enabled:
             import wandb
 
-            labels = [config.get("study"), stage, config.get("worker_model")]
+            labels = [
+                config.get("study"),
+                config.get("task"),
+                stage,
+                config.get("fit_condition"),
+                config.get("worker_model"),
+            ]
             run_name = "-".join(str(label) for label in labels if label)
             wandb_run = wandb.init(
                 project=os.getenv("WANDB_PROJECT", PROJECT_NAME),

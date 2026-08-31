@@ -6,6 +6,8 @@ from pipeline.validation import validate_stage
 
 
 def materialize_stage(study: dict[str, Any], stage: str) -> dict[str, Any]:
+    if "tasks" in study:
+        raise ConfigError("Select a panel task before materializing a pipeline stage.")
     stages = study["pipeline"]["stages"]
     if stage not in stages:
         raise ConfigError(f"Stage '{stage}' is not configured for study '{study['name']}'.")
