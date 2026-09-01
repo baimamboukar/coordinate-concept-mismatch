@@ -34,7 +34,7 @@ def validate_cuda_runtime(execution: dict[str, Any], dtype: str = "bfloat16") ->
     return {
         "gpu": name,
         "memory_gb": memory_gb,
-        "cuda_runtime": torch.version.cuda,
+        "cuda_runtime": getattr(getattr(torch, "version", None), "cuda", None),
         "cuda_driver_support": driver_support,
     }
 
