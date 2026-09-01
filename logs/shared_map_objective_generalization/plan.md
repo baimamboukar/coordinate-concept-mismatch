@@ -49,6 +49,10 @@ outcome is held-out retention of same-task improvement. Retain AUROC, AUPRC, acc
 accuracy, precision, recall, F1, calibration, confusion counts, low-FPR TPR, source-threshold
 achieved FPR, thresholds, bootstrap intervals, diagnostics, and row-level predictions.
 
+For held-out tasks, retain the inherited generalization rule: at least 50% median recovery, 75%
+median retention, 3/4 substantial recoveries, and no substantial shuffled-pair recovery. This is
+distinct from the stricter 75% recovery-and-retention fitting-task compatibility gate above.
+
 If stronger reconstruction alone succeeds, the earlier trade-off was fitting-procedure dependent.
 If a fitting-task-compatible map degrades on held-out tasks, the result supports limited
 task-general map recovery under the tested class. Task-specific low-rank adaptation is a separate,
