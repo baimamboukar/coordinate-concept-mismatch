@@ -35,8 +35,6 @@ def validate_material_preparation(study: dict[str, Any]) -> None:
     }
     if study["reuse_materials"] != expected:
         raise ConfigError("Generated panel materials must belong to the current study.")
-    if any(spec and spec["role"] == "held_out" for spec in study["tasks"].values()):
-        raise ConfigError("Material generation currently requires an included-task-only panel.")
 
 
 def prepare_panel_materials(

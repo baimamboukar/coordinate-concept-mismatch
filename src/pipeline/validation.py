@@ -90,6 +90,7 @@ def _validate_alignment(config: dict[str, Any]) -> None:
         "permutation_diagonal",
         "orthogonal_procrustes",
         "affine_ridge",
+        "probe_bank_affine",
         "quotient_ridge",
     }
     if not methods or len(methods) != len(set(methods)) or set(methods) - supported:
@@ -104,6 +105,8 @@ def _validate_alignment(config: dict[str, Any]) -> None:
         raise ConfigError("Alignment requires the shuffled-pair affine negative control.")
     if alignment.get("primary_probe_family") not in config["probes"]["primary_families"]:
         raise ConfigError("The primary alignment probe family must be trained at primary depth.")
+    if "probe_bank_affine" in methods and alignment.get("fitting") is None:
+        raise ConfigError("Probe-bank alignment requires grouped fitting materials.")
     if len({model["hidden_size"] for model in config["models"].values()}) != 1:
         raise ConfigError("The configured alignment maps require a shared activation width.")
     materials = config.get("materials", {})

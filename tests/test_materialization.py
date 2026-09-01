@@ -4,6 +4,7 @@ from pathlib import Path
 from probe_transfer.materialization import (
     materialize_baseline,
     materialize_fit_activations,
+    materialize_fit_probes,
     materialize_recovery_reference,
 )
 
@@ -171,3 +172,43 @@ def test_cross_task_reference_materializes_only_recovery_rows(tmp_path: Path, mo
     command = calls[0]
     assert "recovery.jsonl" in command
     assert "predictions.jsonl" not in command
+
+
+def test_probe_aware_fit_materializes_only_pinned_linear_probe_bundles(
+    tmp_path: Path, monkeypatch
+) -> None:
+    calls = []
+    monkeypatch.setattr("probe_transfer.materialization.shutil.which", lambda _name: "/usr/bin/hf")
+    monkeypatch.setattr(
+        "probe_transfer.materialization.subprocess.run",
+        lambda command, **kwargs: calls.append(command),
+    )
+    config = {
+        "artifacts": {"bucket": "test/project", "dataset_key": "heldout-v1"},
+        "data_seeds": [42, 137],
+        "models": {"source": {"artifact_key": "source"}, "target": {"artifact_key": "target"}},
+        "fit_materials": {
+            "datasets": [
+                {
+                    "dataset_key": "sst2-v1",
+                    "source_study": "objective_study",
+                    "probe_source_name": "objective_stage",
+                    "probe_source_variant": "sst2-transfer",
+                },
+                {
+                    "dataset_key": "wildguard-v1",
+                    "source_study": "objective_study",
+                    "probe_source_name": "objective_stage",
+                    "probe_source_variant": "wildguard-transfer",
+                },
+            ]
+        },
+    }
+
+    materialize_fit_probes(config, tmp_path)
+
+    assert len(calls) == 2
+    for command in calls:
+        assert command.count("--include") == 4
+        assert "predictions.jsonl" not in command
+        assert any("objective-study" in value for value in command)

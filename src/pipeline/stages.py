@@ -14,6 +14,7 @@ from probe_transfer.materialization import (
     materialize_activations,
     materialize_baseline,
     materialize_fit_activations,
+    materialize_fit_probes,
     materialize_recovery_reference,
 )
 from probe_transfer.preparation import prepare_dataset
@@ -58,6 +59,12 @@ def _align(config: dict[str, Any], tracker: Tracker, model: str | None) -> None:
     if config.get("fit_materials") is not None:
         fit_root = baseline / "fit"
         materialize_fit_activations(config, fit_root)
+        fitting = config["alignment"].get("fitting", {})
+        if (
+            "probe_bank_affine" in config["alignment"]["methods"]
+            or fitting.get("selection_metric") == "worst_probe_score_mse"
+        ):
+            materialize_fit_probes(config, fit_root)
         reference_path = materialize_recovery_reference(config, baseline / "reference")
     run_alignment_experiment(config, tracker, fit_root=fit_root, reference_path=reference_path)
 

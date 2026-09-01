@@ -150,3 +150,36 @@ def test_grouped_selection_still_rejects_heldout_fit_data() -> None:
     study["fit_conditions"]["uniform_fixed"]["datasets"] = {"sst2": 12000, "ag_news": 12000}
     with pytest.raises(ConfigError, match="Held-out task activations"):
         select_task(study, "sst2", "uniform_fixed")
+
+
+@pytest.mark.parametrize(
+    "study_name,source_model",
+    [
+        ("smollm_shared_map_objective_generalization", "smollm1"),
+        ("olmo1_shared_map_objective_generalization", "ai2_olmo1"),
+    ],
+)
+def test_objective_generalization_protocol_is_identical_across_model_pairs(
+    study_name, source_model
+) -> None:
+    study = load_config(CONFIGS_DIR / "studies" / f"{study_name}.yaml")
+    expected_rows = {
+        "uniform_fixed": 16,
+        "reconstruction_selected": 560,
+        "probe_selected": 560,
+        "probe_bank": 616,
+    }
+    for condition, rows in expected_rows.items():
+        config = materialize_stage(select_task(study, "ag_news", condition), "align")
+        assert config["alignment"]["fit_split"] == "calibration"
+        assert config["alignment"]["diagnostic_split"] == "calibration_validation"
+        assert config["materials"]["expected_test_rows"] == 2000
+        assert config["expected_outputs"]["alignment_selection_rows"] == rows
+        assert config["artifacts"]["split_reference"]["model"] == source_model
+        assert all(
+            entry["probe_source_name"] == "shared_map_objective_generalization"
+            for entry in config["fit_materials"]["datasets"]
+        )
+    bank = materialize_stage(select_task(study, "mnli", "probe_bank"), "align")
+    assert bank["alignment"]["primary_method"] == "probe_bank_affine"
+    assert bank["alignment"]["methods"] == ["affine_ridge", "probe_bank_affine"]

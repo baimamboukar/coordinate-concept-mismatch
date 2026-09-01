@@ -153,3 +153,46 @@ def test_batch_skips_heldout_compute_when_compatibility_fails(tmp_path: Path, mo
     assert summary["eligible_conditions"] == []
     assert len(summary["heldout_skipped_conditions"]) == 4
     assert published == [True]
+
+
+def test_batch_prepares_heldout_materials_only_after_a_condition_qualifies(
+    tmp_path: Path, monkeypatch
+) -> None:
+    study = _tiny_study()
+    study["execution"]["prepare_materials"] = True
+    calls = []
+    monkeypatch.setenv("EXPERIMENT_OUTPUT_DIR", str(tmp_path))
+
+    def prepare(_study, _path, _root, tasks):
+        calls.append(("prepare", tuple(tasks)))
+
+    def run_task(_study, _path, _root, task, conditions):
+        calls.append(("evaluate", task, tuple(conditions)))
+        return [
+            {
+                "task": task,
+                "condition": condition,
+                "passes_criterion": True,
+                "map_fingerprints": {"shared": condition},
+            }
+            for condition in conditions
+        ]
+
+    monkeypatch.setattr("pipeline.batch.prepare_panel_materials", prepare)
+    monkeypatch.setattr("pipeline.batch._run_task", run_task)
+    monkeypatch.setattr("pipeline.batch.publish_artifacts", lambda *_args: None)
+    run_alignment_panel(study, CONFIGS_DIR / "studies/smollm_shared_map_compatibility.yaml")
+
+    heldout_prepare = calls.index(("prepare", ("ag_news", "mnli")))
+    included_evaluations = [
+        index
+        for index, call in enumerate(calls)
+        if call[0] == "evaluate" and call[1] in {"sst2", "wildguard"}
+    ]
+    heldout_evaluations = [
+        index
+        for index, call in enumerate(calls)
+        if call[0] == "evaluate" and call[1] in {"ag_news", "mnli"}
+    ]
+    assert calls[0] == ("prepare", ("sst2", "wildguard"))
+    assert max(included_evaluations) < heldout_prepare < min(heldout_evaluations)

@@ -36,8 +36,7 @@ def test_material_generation_cannot_overwrite_a_previous_study() -> None:
         validate_material_preparation(study)
     study = _study()
     study["tasks"]["heldout"] = {"role": "held_out"}
-    with pytest.raises(ConfigError, match="included-task-only"):
-        validate_material_preparation(study)
+    validate_material_preparation(study)
 
 
 def test_preparation_resume_verifies_the_exact_pinned_recipe(tmp_path, monkeypatch) -> None:

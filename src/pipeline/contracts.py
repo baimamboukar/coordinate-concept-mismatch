@@ -76,11 +76,13 @@ def _alignment(config: dict[str, Any]) -> dict[str, int]:
     }
     fitting = alignment.get("fitting")
     if fitting is not None:
+        powers = len(fitting.get("source_variance_powers", [0]))
+        candidates = 2 * powers + int("probe_bank_affine" in alignment["methods"])
         outputs["alignment_selection_rows"] = (
             seeds
             * directions
             * len(alignment["depths"])
-            * 2
+            * candidates
             * len(fitting["relative_alphas"])
             * len(config["fit_materials"]["datasets"])
         )

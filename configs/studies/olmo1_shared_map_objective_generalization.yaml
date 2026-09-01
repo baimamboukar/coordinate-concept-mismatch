@@ -1,0 +1,193 @@
+extends: olmo1_independent_training_sst2.yaml
+name: olmo1_shared_map_objective_generalization
+
+sampling:
+  test_size: 2000
+  disjoint_calibration:
+    train_size: 12000
+    validation_size: 2000
+    holdout_seed: 314
+    evaluation_source: unused_training_pool
+
+activations:
+  normalized_depths: [0.75]
+  primary_depth: 0.75
+
+tracking:
+  mode: online
+  local_report: false
+
+execution:
+  alignment_workers: 2
+  prepare_materials: true
+
+reuse_materials:
+  study: olmo1_shared_map_objective_generalization
+  transfer: shared_map_objective_generalization
+  align: shared_map_objective_generalization
+
+tasks:
+  sst2:
+    role: fit
+    sampling: {test_size: 2000}
+    artifacts:
+      dataset_key: sst2-shared-map-objective-v1
+      split_reference: {dataset_key: sst2-sentiment-v1, model: ai2_olmo1}
+  wildguard:
+    role: fit
+    dataset:
+      id: allenai/wildguardmix
+      revision: d29c47f41c8b51348b5c8e8c81c039b3132b66d1
+      train: {subset: wildguardtrain, split: train}
+      test: {subset: wildguardtest, split: test}
+      prompt_field: prompt
+      label_field: prompt_harm_label
+      positive_label: harmful
+      negative_label: unharmful
+      adversarial_field: adversarial
+    sampling: {test_size: 2000, stratify_by: [adversarial]}
+    artifacts:
+      dataset_key: wildguardmix-shared-map-objective-v1
+      split_reference: {dataset_key: wildguardmix-v1, model: ai2_olmo1}
+  ag_news:
+    role: held_out
+    dataset:
+      id: fancyzhx/ag_news
+      revision: eb185aade064a813bc0b7f42de02595523103ca4
+      train: {subset: default, split: train}
+      test: {subset: default, split: test}
+      prompt_field: text
+      label_field: label
+      positive_label: 0
+      negative_label: 2
+      adversarial_field: null
+    sampling: {test_size: 2000, stratify_by: []}
+    artifacts:
+      dataset_key: ag-news-shared-map-objective-v1
+      split_reference: {dataset_key: ag-news-world-business-v1, model: ai2_olmo1}
+  mnli:
+    role: held_out
+    dataset:
+      id: nyu-mll/glue
+      revision: bcdcba79d07bc864c1c254ccfcedcce55bcc9a8c
+      train: {subset: mnli, split: train}
+      test: {subset: mnli, split: validation_matched}
+      prompt_field: null
+      prompt_template: "Premise: {premise}\nHypothesis: {hypothesis}"
+      prompt_fields: [premise, hypothesis]
+      label_field: label
+      positive_label: 0
+      negative_label: 2
+      adversarial_field: null
+    sampling: {test_size: 2000, stratify_by: []}
+    artifacts:
+      dataset_key: mnli-shared-map-objective-v1
+      split_reference: {dataset_key: mnli-entailment-contradiction-v1, model: ai2_olmo1}
+
+fit_conditions:
+  uniform_fixed:
+    datasets: {sst2: 12000, wildguard: 12000}
+    split: calibration
+    primary_method: affine_ridge
+    methods: [affine_ridge]
+    fitting:
+      weighting: uniform
+      relative_alphas: [0.0001]
+      selection_metric: worst_feature_mse
+  reconstruction_selected:
+    datasets: {sst2: 12000, wildguard: 12000}
+    split: calibration
+    primary_method: affine_ridge
+    methods: [affine_ridge]
+    fitting:
+      weighting: source_variance
+      source_variance_powers: [0.0, 0.25, 0.5, 0.75, 1.0]
+      relative_alphas: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0]
+      selection_metric: worst_feature_mse
+  probe_selected:
+    datasets: {sst2: 12000, wildguard: 12000}
+    split: calibration
+    primary_method: affine_ridge
+    methods: [affine_ridge]
+    fitting:
+      weighting: source_variance
+      source_variance_powers: [0.0, 0.25, 0.5, 0.75, 1.0]
+      relative_alphas: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0]
+      selection_metric: worst_probe_score_mse
+  probe_bank:
+    datasets: {sst2: 12000, wildguard: 12000}
+    split: calibration
+    primary_method: probe_bank_affine
+    methods: [affine_ridge, probe_bank_affine]
+    fitting:
+      weighting: source_variance
+      source_variance_powers: [0.0, 0.25, 0.5, 0.75, 1.0]
+      relative_alphas: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0]
+      selection_metric: worst_feature_mse
+
+decision_rules:
+  qualification:
+    required_frozen_failures: 4
+    minimum_same_task_median_recovery: 0.75
+    minimum_same_task_substantial: 3
+    maximum_shuffled_substantial: 0
+  pooled_generalization:
+    minimum_median_recovery: 0.50
+    minimum_median_retention: 0.75
+    minimum_substantial: 3
+    maximum_shuffled_substantial: 0
+  pooled_compatibility:
+    minimum_median_recovery: 0.75
+    minimum_median_retention: 0.75
+    minimum_substantial: 3
+    maximum_shuffled_substantial: 0
+  primary_condition: probe_bank
+  heldout_requires_included_compatibility: true
+  interpretation: confirmatory_objective_generalization
+
+pipeline:
+  stages:
+    prepare:
+      name: shared_map_objective_generalization
+      tracking: {wandb: false, local_report: false}
+    preflight:
+      name: shared_map_objective_generalization
+      tracking: {wandb: false, local_report: false}
+    extract:
+      name: shared_map_objective_generalization
+      tracking: {wandb: false, local_report: false}
+    transfer:
+      name: shared_map_objective_generalization
+      training: true
+    align:
+      name: shared_map_objective_generalization
+      training: true
+      alignment:
+        fit_split: calibration
+        diagnostic_split: calibration_validation
+        primary_depth: 0.75
+        depths: [0.75]
+        primary_probe_family: linear
+        primary_method: affine_ridge
+        methods: [affine_ridge]
+      evaluation:
+        primary_metrics:
+          - aligned_auroc_improvement
+          - recovery_fraction
+          - residual_auroc_gap
+        additional_metrics:
+          - auroc
+          - improvement_retention
+          - alignment_relative_rmse
+          - alignment_mean_cosine
+          - negative_control_results
+        primary_pair_group: primary
+        pair_groups:
+          primary:
+            - [ai2_olmo1, amd_olmo1]
+            - [amd_olmo1, ai2_olmo1]
+        oracle_gate: 0.75
+        minimum_raw_gap: 0.10
+        minimum_improvement: 0.05
+        minimum_recovery: 0.50
+        reference_auroc_atol: 0.00001

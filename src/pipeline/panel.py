@@ -91,8 +91,14 @@ def _select_fit(study: dict[str, Any], configured: dict[str, Any], task: str, fi
         raise ConfigError("Fit conditions must be enabled mappings.")
     sources = condition.get("datasets", condition)
     fitting = condition.get("fitting") if "datasets" in condition else None
-    if "datasets" in condition and set(condition) - {"datasets", "fitting", "split"}:
-        raise ConfigError("Structured fit conditions support only datasets, fitting, and split.")
+    if "datasets" in condition and set(condition) - {
+        "datasets",
+        "fitting",
+        "split",
+        "primary_method",
+        "methods",
+    }:
+        raise ConfigError("Structured fit conditions contain an unsupported field.")
     if not isinstance(sources, dict) or not sources or set(sources) == {task}:
         raise ConfigError("Cross-task fits require a distinct fit task.")
     entries = []
@@ -114,6 +120,12 @@ def _select_fit(study: dict[str, Any], configured: dict[str, Any], task: str, fi
             {
                 "dataset_key": source_config["artifacts"]["dataset_key"],
                 "source_study": study.get("reuse_materials", {}).get("study", study["name"]),
+                "probe_source_name": study.get("reuse_materials", {}).get(
+                    "transfer", source_config["pipeline"]["stages"]["transfer"]["name"]
+                ),
+                "probe_source_variant": source_config["pipeline"]["stages"]["transfer"][
+                    "artifact_variant"
+                ],
                 "expected_train_rows": available,
                 "expected_validation_rows": sizes[diagnostic],
                 "fit_rows": rows,
@@ -122,6 +134,10 @@ def _select_fit(study: dict[str, Any], configured: dict[str, Any], task: str, fi
     reuse = study.get("reuse_materials", {})
     if fitting is not None:
         alignment["alignment"] = merge_config(alignment["alignment"], {"fitting": fitting})
+    if "primary_method" in condition:
+        alignment["alignment"]["primary_method"] = condition["primary_method"]
+    if "methods" in condition:
+        alignment["alignment"]["methods"] = condition["methods"]
     alignment["reference_materials"] = {
         "source_name": reuse.get("align", alignment.get("name", f"{study['name']}_align")),
         "source_study": reuse.get("study", study["name"]),

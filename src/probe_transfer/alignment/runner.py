@@ -45,16 +45,16 @@ def run_alignment_experiment(
                         f"fitting/{row['source_model']}_to_{row['target_model']}/"
                         f"seed_{row['data_seed']}/{row['method']}/{row['fit_task']}"
                     )
+                    keys = (
+                        "relative_alpha",
+                        "source_variance_power",
+                        "validation_relative_mse",
+                        "validation_probe_score_relative_mse",
+                        "sample_weight",
+                        "weighted_train_loss_fraction",
+                    )
                     tracker.metrics(
-                        {
-                            f"{prefix}/{key}": row[key]
-                            for key in (
-                                "relative_alpha",
-                                "validation_relative_mse",
-                                "sample_weight",
-                                "weighted_train_loss_fraction",
-                            )
-                        }
+                        {f"{prefix}/{key}": row[key] for key in keys if row.get(key) is not None}
                     )
 
         for row in recoveries:

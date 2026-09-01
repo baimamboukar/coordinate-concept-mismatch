@@ -69,6 +69,26 @@ def materialize_fit_activations(config: dict[str, Any], destination: Path) -> No
             )
 
 
+def materialize_fit_probes(config: dict[str, Any], destination: Path) -> None:
+    includes = [
+        f"seed_{seed}/{model}.safetensors"
+        for seed in config["data_seeds"]
+        for model in config["models"]
+    ]
+    for fit in fit_material_entries(config):
+        source = study_prefix(
+            fit["probe_source_name"],
+            fit["source_study"],
+            fit["probe_source_variant"],
+        )
+        _sync_public(
+            config,
+            f"{source}/probes",
+            fit_material_root(config, destination, fit) / "probes",
+            include=includes,
+        )
+
+
 def materialize_recovery_reference(config: dict[str, Any], destination: Path) -> Path:
     reference = config["reference_materials"]
     source = study_prefix(

@@ -9,11 +9,12 @@ from core.config import ConfigError, load_config
 from core.constants import CONFIGS_DIR
 from pipeline.config import materialize_stage
 from pipeline.panel import select_task
-from probe_transfer.alignment.methods import fit_affine_ridge
+from probe_transfer.alignment.grouped_ridge import fit_grouped_ridge
+from probe_transfer.alignment.methods import AlignmentMap, fit_affine_ridge
+from probe_transfer.alignment.probe_bank import fit_probe_bank_alignment
 from probe_transfer.alignment.ridge import RidgeSystem
 from probe_transfer.alignment.selection import (
     fit_configured_alignments,
-    fit_grouped_ridge,
     validate_alignment_selection,
 )
 
@@ -156,6 +157,122 @@ def test_selection_is_deterministic() -> None:
         device="cpu",
     )
     assert first[1] == second[1]
+
+
+def test_probe_score_selection_searches_the_full_prespecified_grid() -> None:
+    source, target, sizes, validation = _data()
+    probes = {
+        "small": (np.array([1.0, 0.0, 0.0, 0.0]), 0.1),
+        "large": (np.array([0.0, 1.0, 0.0, 0.0]), -0.2),
+    }
+    first = fit_grouped_ridge(
+        source,
+        target,
+        sizes,
+        validation,
+        weighting="source_variance",
+        relative_alphas=[1e-4, 1e-2],
+        source_variance_powers=[0.0, 1.0],
+        selection_metric="worst_probe_score_mse",
+        probe_parameters=probes,
+        shuffle_seed=42,
+        device="cpu",
+    )
+    second = fit_grouped_ridge(
+        source,
+        target,
+        sizes,
+        validation,
+        weighting="source_variance",
+        relative_alphas=[1e-4, 1e-2],
+        source_variance_powers=[0.0, 1.0],
+        selection_metric="worst_probe_score_mse",
+        probe_parameters=probes,
+        shuffle_seed=42,
+        device="cpu",
+    )
+    assert len(first[1]) == 16
+    assert first[1] == second[1]
+    for method, fitted in first[0].items():
+        selected = [row for row in first[1] if row["method"] == method and row["selected"]]
+        assert len(selected) == 2
+        assert {row["source_variance_power"] for row in selected} == {
+            fitted.metadata["source_variance_power"]
+        }
+        assert {row["relative_alpha"] for row in selected} == {
+            fitted.metadata["ridge_relative_alpha"]
+        }
+
+
+def _probe_bank_materials():
+    rng = np.random.default_rng(42)
+    groups = {}
+    for name, scale in (("first", 1.0), ("second", 2.0)):
+        target = torch.from_numpy(rng.normal(size=(80, 4)).astype(np.float32))
+        validation_target = torch.from_numpy(rng.normal(size=(24, 4)).astype(np.float32))
+        transform = torch.tensor(
+            [
+                [2.0, 0.3, 0.0, 0.0],
+                [0.0, -1.0, 0.2, 0.0],
+                [0.0, 0.0, 0.5, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
+        )
+        source = target @ transform * scale + 0.2
+        validation_source = validation_target @ transform * scale + 0.2
+        groups[name] = (source, target, validation_source, validation_target)
+    stats = {
+        name: {
+            "fit_task": name,
+            "fit_rows": len(group[0]),
+            "validation_rows": len(group[2]),
+            "source_variance": float(group[0].var(unbiased=False)),
+            "sample_weight": 1.0,
+        }
+        for name, group in groups.items()
+    }
+    probes = {
+        "first": (np.array([1.0, 0.0, 0.0, 0.0]), 0.3),
+        "second": (np.array([0.0, 1.0, 0.0, 0.0]), -0.4),
+    }
+    base = AlignmentMap("affine_ridge", weight=torch.eye(4), bias=torch.zeros(4))
+    return base, groups, probes, stats
+
+
+def test_probe_bank_lifts_fitted_scores_into_one_affine_map() -> None:
+    base, groups, probes, stats = _probe_bank_materials()
+    fitted, records = fit_probe_bank_alignment(
+        base,
+        groups,
+        probes,
+        stats,
+        relative_alphas=[1e-8],
+        variance_power=0.0,
+        weighting="uniform",
+    )
+    assert fitted.method == "probe_bank_affine"
+    assert len(records) == 2
+    assert all(row["selected"] for row in records)
+    for name, group in groups.items():
+        weight, intercept = probes[name]
+        expected = group[2].numpy() @ weight + intercept
+        observed = fitted.transform(group[3].numpy()) @ weight + intercept
+        np.testing.assert_allclose(observed, expected, atol=1e-4)
+
+
+def test_probe_bank_rejects_rank_deficient_monitor_directions() -> None:
+    base, groups, probes, stats = _probe_bank_materials()
+    probes["second"] = (2 * probes["first"][0], 0.0)
+    with pytest.raises(ValueError, match="linearly independent"):
+        fit_probe_bank_alignment(
+            base,
+            groups,
+            probes,
+            stats,
+            relative_alphas=[1e-4],
+            variance_power=0.0,
+            weighting="uniform",
+        )
 
 
 def test_selection_loads_only_fitting_task_validation(tmp_path: Path, monkeypatch) -> None:

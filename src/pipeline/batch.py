@@ -55,8 +55,12 @@ def run_alignment_panel(study: dict[str, Any], path: Path) -> None:
         eligible = eligible_conditions(comparisons, fit_tasks, conditions)
         _emit("compatibility_checked", eligible_conditions=eligible)
         excluded = [condition for condition in conditions if condition not in eligible]
-        heldout_results = list(
-            executor.map(lambda task: _run_task(study, path, root, task, eligible), held_out)
+        if eligible and study.get("execution", {}).get("prepare_materials", False):
+            prepare_panel_materials(study, path, root, held_out)
+        heldout_results = (
+            list(executor.map(lambda task: _run_task(study, path, root, task, eligible), held_out))
+            if eligible
+            else []
         )
         comparisons.extend(row for rows in heldout_results for row in rows)
     _assert_shared_maps(comparisons)
@@ -180,13 +184,9 @@ def summarize_alignment(
         if key in signatures and signatures[key] != row["map_fingerprint"]:
             raise ValueError("A selected map differs across fitting-task diagnostics.")
         signatures[key] = row["map_fingerprint"]
-    if (
-        len(signatures)
-        != len(config["data_seeds"])
-        * len(config["alignment"]["depths"])
-        * sum(len(pairs) for pairs in config["evaluation"]["pair_groups"].values())
-        * 2
-    ):
+    if len(signatures) != len(config["data_seeds"]) * len(config["alignment"]["depths"]) * sum(
+        len(pairs) for pairs in config["evaluation"]["pair_groups"].values()
+    ) * (len([name for name in config["alignment"]["methods"] if name != "quotient_ridge"]) + 1):
         raise ValueError("Selected map identity records are incomplete.")
     return {**result, "map_fingerprints": signatures}
 
