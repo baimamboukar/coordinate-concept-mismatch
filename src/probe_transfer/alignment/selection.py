@@ -10,9 +10,11 @@ from probe_transfer.alignment.grouped_ridge import fit_grouped_ridge
 from probe_transfer.alignment.materials import paired_split
 from probe_transfer.alignment.methods import AlignmentMap, fit_ambient_alignments
 from probe_transfer.alignment.probe_bank import load_fit_probe_bank
+from probe_transfer.alignment.task_adaptation import validate_task_adaptation
 
 
 def validate_alignment_selection(config: dict[str, Any]) -> None:
+    validate_task_adaptation(config)
     settings = config["alignment"].get("fitting")
     if settings is None:
         return

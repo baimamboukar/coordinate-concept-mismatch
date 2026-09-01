@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from core.config import load_config
 from core.constants import PIPELINE_STAGES, PROJECT_ROOT
+from pipeline.adaptation_batch import run_task_adaptation_panel, task_adaptation_variants
 from pipeline.batch import run_alignment_panel
 from pipeline.config import materialize_stage
 from pipeline.materials import validate_material_preparation
@@ -50,17 +51,23 @@ def main() -> None:
         validate_material_preparation(study)
         validate_contrasts(study)
     if args.validate_only:
-        variants = (
-            task_variants(study, args.stage)
-            if args.task is None
-            else [select_task(study, args.task, args.fit)]
-        )
+        if args.panel and study.get("execution", {}).get("panel_mode") == "task_adaptation":
+            variants = task_adaptation_variants(study)
+        else:
+            variants = (
+                task_variants(study, args.stage)
+                if args.task is None
+                else [select_task(study, args.task, args.fit)]
+            )
         for variant in variants:
             materialize_stage(variant, args.stage)
         print(f"Validated {study['name']}:{args.stage}")
         return
     if args.panel:
-        run_alignment_panel(study, args.config)
+        if study.get("execution", {}).get("panel_mode") == "task_adaptation":
+            run_task_adaptation_panel(study, args.config)
+        else:
+            run_alignment_panel(study, args.config)
         return
     study = select_task(study, args.task, args.fit)
     run_stage(study, args.stage, model=args.model, publish_only=args.publish_only)

@@ -95,13 +95,14 @@ def _validate_alignment(config: dict[str, Any]) -> None:
     }
     if not methods or len(methods) != len(set(methods)) or set(methods) - supported:
         raise ConfigError("Alignment methods must be unique supported methods.")
-    if alignment.get("primary_method") not in methods:
+    adapted = alignment.get("task_adaptation") is not None
+    if not adapted and alignment.get("primary_method") not in methods:
         raise ConfigError("The primary alignment method must be evaluated.")
     if alignment.get("primary_depth") not in alignment.get("depths", []):
         raise ConfigError("The primary alignment depth must be evaluated.")
     if alignment.get("negative_control") in methods:
         raise ConfigError("The alignment negative control must be separate from fitted methods.")
-    if alignment.get("negative_control") != "shuffled_affine_ridge":
+    if not adapted and alignment.get("negative_control") != "shuffled_affine_ridge":
         raise ConfigError("Alignment requires the shuffled-pair affine negative control.")
     if alignment.get("primary_probe_family") not in config["probes"]["primary_families"]:
         raise ConfigError("The primary alignment probe family must be trained at primary depth.")

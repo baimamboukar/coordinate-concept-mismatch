@@ -1,5 +1,6 @@
 from typing import Any
 
+from probe_transfer.alignment.task_adaptation import adaptation_method_count
 from probe_transfer.symmetry.protocol import (
     estimated_alignment_enabled,
     selected_models,
@@ -52,7 +53,11 @@ def _alignment(config: dict[str, Any]) -> dict[str, int]:
     directions = sum(len(pairs) for pairs in config["evaluation"]["pair_groups"].values())
     metrics_per_seed = 0
     recoveries_per_seed = 0
-    ambient = len([name for name in alignment["methods"] if name != "quotient_ridge"]) + 1
+    ambient = (
+        len([name for name in alignment["methods"] if name != "quotient_ridge"])
+        + 1
+        + adaptation_method_count(alignment)
+    )
     quotient = "quotient_ridge" in alignment["methods"]
     for depth in alignment["depths"]:
         families = (

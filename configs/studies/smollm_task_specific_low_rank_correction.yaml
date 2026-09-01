@@ -1,0 +1,59 @@
+extends: smollm_shared_map_objective_generalization.yaml
+name: smollm_task_specific_low_rank_correction
+
+probes:
+  primary_families: [linear]
+  secondary_families: [linear]
+
+execution:
+  panel_mode: task_adaptation
+  alignment_workers: 2
+  prepare_materials: false
+
+reuse_materials:
+  study: smollm_shared_map_objective_generalization
+  transfer: shared_map_objective_generalization
+  align: shared_map_objective_generalization
+
+fit_conditions:
+  uniform_fixed: null
+  reconstruction_selected:
+    primary_method: low_rank_r8_n256
+  probe_selected:
+    primary_method: low_rank_r8_n256
+  probe_bank: null
+
+decision_rules:
+  pooled_generalization:
+    minimum_median_recovery: 0.50
+    minimum_median_retention: 0.75
+    minimum_substantial: 3
+    maximum_shuffled_substantial: 0
+  primary_condition: probe_selected
+  interpretation: confirmatory_task_specific_low_rank_correction
+
+pipeline:
+  stages:
+    prepare:
+      name: task_specific_low_rank_correction
+    preflight:
+      name: task_specific_low_rank_correction
+    extract:
+      name: task_specific_low_rank_correction
+    transfer:
+      name: task_specific_low_rank_correction
+    align:
+      name: task_specific_low_rank_correction
+      alignment:
+        primary_method: low_rank_r8_n256
+        negative_control: shuffled_low_rank_r8_n256
+        methods: [affine_ridge]
+        task_adaptation:
+          base_method: affine_ridge
+          calibration_split: calibration
+          calibration_rows: [64, 256, 1024, 4096]
+          ranks: [1, 2, 4, 8, 16, 32]
+          confirmatory_rows: 256
+          confirmatory_rank: 8
+          relative_alpha: 0.0001
+          reference_method: affine_ridge

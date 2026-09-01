@@ -5,6 +5,7 @@ from typing import Any, TextIO
 import numpy as np
 
 from probe_transfer.alignment import cross_task
+from probe_transfer.alignment.fit import fit_evaluation_maps
 from probe_transfer.alignment.materials import (
     ambient_diagnostics,
     assert_references,
@@ -25,7 +26,7 @@ from probe_transfer.alignment.quotient import (
     quotient_scores,
 )
 from probe_transfer.alignment.recovery import alignment_recovery_record
-from probe_transfer.alignment.selection import fit_configured_alignments
+from probe_transfer.alignment.task_adaptation import recovery_reference_method
 from probe_transfer.artifacts import sha256_file, write_jsonl
 from probe_transfer.probes.evaluation import (
     binary_metrics,
@@ -61,38 +62,18 @@ def evaluate_checkpoint_alignment(
             for source, target, pair_group in direction_groups(config):
                 for depth in alignment["depths"]:
                     layer = layer_key(depth)
-                    train = cross_task.load_fit_split(
+                    selected_maps, selection_rows, train = fit_evaluation_maps(
+                        baseline_dir,
                         fit_root,
                         config,
-                        source,
-                        target,
-                        f"seed_{data_seed}_{alignment.get('fit_split', 'train')}",
-                        layer,
-                    )
-                    _assert_row_count(train, cross_task.fit_expected_rows(config), "fit train")
-                    selected_maps, selection_rows = fit_configured_alignments(
-                        train[0],
-                        train[1],
-                        config,
-                        fit_root,
                         source=source,
                         target=target,
                         data_seed=data_seed,
+                        depth=depth,
                         layer=layer,
-                        shuffle_seed=alignment["shuffled_pairing_seed"] + comparison_index,
                         device=device,
                     )
-                    selections.extend(
-                        {
-                            "data_seed": data_seed,
-                            "source_model": source,
-                            "target_model": target,
-                            "depth": depth,
-                            "pair_group": pair_group,
-                            **row,
-                        }
-                        for row in selection_rows
-                    )
+                    selections.extend({"pair_group": pair_group, **row} for row in selection_rows)
                     diagnostic_split = alignment.get("diagnostic_split", "validation")
                     validation = paired_split(
                         baseline_dir, source, target, f"seed_{data_seed}_{diagnostic_split}", layer
@@ -237,6 +218,7 @@ def evaluate_checkpoint_alignment(
                                     recovery,
                                     recovery_reference,
                                     tolerance=config["evaluation"]["reference_auroc_atol"],
+                                    reference_method=recovery_reference_method(config, method),
                                 )
                             )
                             comparison_index += 1

@@ -126,12 +126,14 @@ def add_improvement_retention(
     reference: dict[RecoveryKey, dict[str, Any]] | None,
     *,
     tolerance: float,
+    reference_method: str | None = None,
 ) -> dict[str, Any]:
     if reference is None:
         return row
-    reference_row = (
-        {**row, "method": "affine_ridge"} if row["method"] == "probe_bank_affine" else row
+    method = reference_method or (
+        "affine_ridge" if row["method"] == "probe_bank_affine" else row["method"]
     )
+    reference_row = {**row, "method": method}
     same_task = reference.get(_key(reference_row))
     if same_task is None:
         raise ValueError("Same-task recovery reference is incomplete.")
