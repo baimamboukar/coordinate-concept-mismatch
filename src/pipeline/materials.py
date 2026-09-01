@@ -17,7 +17,7 @@ from pipeline.config import materialize_stage
 from pipeline.panel import select_task
 from probe_transfer.alignment.runner import _assert_expected_outputs
 from probe_transfer.artifacts import write_json
-from probe_transfer.materialization import verify_prior_probe_splits
+from probe_transfer.materialization import materialize_activations, verify_prior_probe_splits
 from probe_transfer.transfer.runner import _validate_activations, _validate_outputs
 
 
@@ -86,6 +86,13 @@ def _run_stage(study, path, root, task, stage, model=None) -> None:
     if model is not None:
         command.extend(["--model", model])
     config = materialize_stage(select_task(study, task), stage)
+    reused = stage in {"preflight", "extract"} and _materialize_reused_activations(
+        config, materials, model
+    )
+    if stage == "preflight" and reused:
+        _validate_activations(materials, {**config, "models": {model: config["models"][model]}})
+        print(f"Reused published activations: {study['name']}/{task}/{model}", flush=True)
+        return
     if stage == "extract" and (materials / "activations" / str(model)).is_dir():
         _validate_activations(materials, {**config, "models": {model: config["models"][model]}})
         command.append("--publish-only")
@@ -105,3 +112,14 @@ def _run_stage(study, path, root, task, stage, model=None) -> None:
             stderr=subprocess.STDOUT,
             check=True,
         )
+
+
+def _materialize_reused_activations(config, destination: Path, model: str | None) -> bool:
+    reuse = config["artifacts"].get("reuse_activations", False)
+    if type(reuse) is not bool:
+        raise ConfigError("reuse_activations must be a boolean.")
+    if reuse:
+        if model is None:
+            raise ValueError("Reused activations require a selected model.")
+        materialize_activations(config, destination, models=[model])
+    return reuse

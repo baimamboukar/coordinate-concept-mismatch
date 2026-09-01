@@ -8,7 +8,11 @@ from core.config import ConfigError, load_config
 from core.constants import CONFIGS_DIR
 from core.tracking import Tracker
 from pipeline.config import materialize_stage
-from pipeline.materials import prepare_panel_materials, validate_material_preparation
+from pipeline.materials import (
+    _materialize_reused_activations,
+    prepare_panel_materials,
+    validate_material_preparation,
+)
 from pipeline.panel import select_task
 from probe_transfer.materialization import verify_prior_probe_splits
 from probe_transfer.preparation import prepare_dataset
@@ -100,3 +104,22 @@ def test_prior_probe_rows_are_checked_against_published_activations(tmp_path, mo
     path.write_text("\n".join(json.dumps(row) for row in rows))
     with pytest.raises(ValueError, match="row_id order differs"):
         verify_prior_probe_splits(config, rows_root, cache)
+
+
+def test_explicit_activation_reuse_materializes_only_the_selected_model(
+    tmp_path, monkeypatch
+) -> None:
+    calls = []
+    monkeypatch.setattr(
+        "pipeline.materials.materialize_activations",
+        lambda config, destination, models: calls.append((config, destination, models)),
+    )
+    config = {"artifacts": {"reuse_activations": True}}
+
+    assert _materialize_reused_activations(config, tmp_path, "first") is True
+    assert calls == [(config, tmp_path, ["first"])]
+
+    with pytest.raises(ConfigError, match="must be a boolean"):
+        _materialize_reused_activations(
+            {"artifacts": {"reuse_activations": "yes"}}, tmp_path, "first"
+        )

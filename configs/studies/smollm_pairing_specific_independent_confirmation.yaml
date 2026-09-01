@@ -1,0 +1,78 @@
+extends: smollm_pairing_specific_control_decomposition.yaml
+name: smollm_pairing_specific_independent_confirmation
+
+execution:
+  prepare_materials: true
+
+reuse_materials:
+  study: smollm_pairing_specific_independent_confirmation
+  transfer: pairing_specific_independent_confirmation
+  align: pairing_specific_independent_confirmation
+
+tasks:
+  sst2:
+    artifacts: {reuse_activations: true}
+  wildguard:
+    artifacts: {reuse_activations: true}
+  ag_news: null
+  mnli: null
+  qnli:
+    role: held_out
+    dataset:
+      id: nyu-mll/glue
+      revision: bcdcba79d07bc864c1c254ccfcedcce55bcc9a8c
+      train: {subset: qnli, split: train}
+      test: {subset: qnli, split: validation}
+      prompt_field: null
+      prompt_template: "Question: {question}\nSentence: {sentence}"
+      prompt_fields: [question, sentence]
+      label_field: label
+      positive_label: 0
+      negative_label: 1
+      adversarial_field: null
+    sampling: {test_size: 2000, stratify_by: []}
+    artifacts: {dataset_key: qnli-pairing-confirmation-v1}
+  qqp:
+    role: held_out
+    dataset:
+      id: nyu-mll/glue
+      revision: bcdcba79d07bc864c1c254ccfcedcce55bcc9a8c
+      train: {subset: qqp, split: train}
+      test: {subset: qqp, split: validation}
+      prompt_field: null
+      prompt_template: "Question 1: {question1}\nQuestion 2: {question2}"
+      prompt_fields: [question1, question2]
+      label_field: label
+      positive_label: 1
+      negative_label: 0
+      adversarial_field: null
+    sampling: {test_size: 2000, stratify_by: []}
+    artifacts: {dataset_key: qqp-pairing-confirmation-v1}
+
+decision_rules:
+  independent_confirmation:
+    total_endpoints: 4
+    minimum_endpoint_passes: 3
+    require_each_task: true
+    require_each_model_pair: true
+    multiple_testing: holm
+    familywise_alpha: 0.05
+  interpretation: confirmatory_pairing_specific_independent_confirmation
+
+pipeline:
+  stages:
+    prepare:
+      name: pairing_specific_independent_confirmation
+    preflight:
+      name: pairing_specific_independent_confirmation
+    extract:
+      name: pairing_specific_independent_confirmation
+    transfer:
+      name: pairing_specific_independent_confirmation
+    align:
+      name: pairing_specific_independent_confirmation
+      alignment:
+        task_adaptation:
+          controls:
+            residual_shuffle_repeats: 99
+            source_shuffle_repeats: 99

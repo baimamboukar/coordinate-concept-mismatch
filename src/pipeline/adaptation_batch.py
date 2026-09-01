@@ -10,7 +10,9 @@ from core.config import ConfigError
 from core.constants import EXPERIMENT_OUTPUT_ENV
 from pipeline.batch import _assert_shared_maps, _emit, _run_task
 from pipeline.config import materialize_stage
+from pipeline.materials import prepare_panel_materials, validate_material_preparation
 from pipeline.panel import select_task
+from pipeline.qualification import qualification_rules, qualify_tasks
 from probe_transfer.alignment.task_adaptation import method_metadata
 from probe_transfer.artifacts import write_jsonl
 from probe_transfer.layout import study_prefix
@@ -26,6 +28,7 @@ def task_adaptation_variants(study: dict[str, Any]):
 
 def run_task_adaptation_panel(study: dict[str, Any], path: Path) -> None:
     conditions, tasks = _validate_panel(study)
+    fit_tasks = _fit_tasks(study)
     configured_root = os.getenv(EXPERIMENT_OUTPUT_ENV)
     if not configured_root:
         raise RuntimeError(f"{EXPERIMENT_OUTPUT_ENV} is required for panel output.")
@@ -34,13 +37,29 @@ def run_task_adaptation_panel(study: dict[str, Any], path: Path) -> None:
     for variant in task_adaptation_variants(study):
         materialize_stage(variant, "align")
 
+    qualifications = None
+    active_tasks = tasks
+    if study["execution"].get("prepare_materials"):
+        prepare_panel_materials(study, path, root, [*fit_tasks, *tasks])
+        qualifications = qualify_tasks(root, study, tasks)
+        active_tasks = [task for task in tasks if qualifications[task]["qualified"]]
+        _emit(
+            "qualification_complete",
+            qualified_tasks=active_tasks,
+            skipped_tasks=[task for task in tasks if task not in active_tasks],
+        )
+
     workers = study["execution"].get("alignment_workers", 1)
     if type(workers) is not int or not 1 <= workers <= len(tasks):
         raise ConfigError("Adaptation workers must be bounded by held-out task count.")
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        outcomes = list(
-            executor.map(lambda task: _run_task(study, path, root, task, conditions), tasks)
-        )
+    outcomes = []
+    if active_tasks:
+        with ThreadPoolExecutor(max_workers=min(workers, len(active_tasks))) as executor:
+            outcomes = list(
+                executor.map(
+                    lambda task: _run_task(study, path, root, task, conditions), active_tasks
+                )
+            )
     comparisons = [row for task_rows in outcomes for row in task_rows]
     _assert_shared_maps(comparisons)
     decomposition = []
@@ -51,7 +70,7 @@ def run_task_adaptation_panel(study: dict[str, Any], path: Path) -> None:
             )
     curves = [
         row
-        for task in tasks
+        for task in active_tasks
         for condition in conditions
         for row in _curve_rows(root, study, task, condition)
     ]
@@ -70,6 +89,9 @@ def run_task_adaptation_panel(study: dict[str, Any], path: Path) -> None:
         "curve_rows": len(curves),
         "control_decomposition_rows": len(decomposition),
     }
+    if qualifications is not None:
+        summary["qualifications"] = qualifications
+        summary["skipped_tasks"] = [task for task in tasks if task not in active_tasks]
     results = root / "results"
     results.mkdir(exist_ok=True)
     write_jsonl(results / "adaptation_curves.jsonl", curves)
@@ -91,8 +113,14 @@ def _validate_panel(study: dict[str, Any]) -> tuple[list[str], list[str]]:
     execution = study.get("execution", {})
     if execution.get("panel_mode") != "task_adaptation":
         raise ConfigError("Task-adaptation execution requires its explicit panel mode.")
-    if execution.get("prepare_materials") is not False or not study.get("reuse_materials"):
-        raise ConfigError("Task adaptation must reuse immutable published materials.")
+    if type(execution.get("prepare_materials")) is not bool or not study.get("reuse_materials"):
+        raise ConfigError("Task adaptation requires an explicit material strategy.")
+    validate_material_preparation(study)
+    if execution["prepare_materials"]:
+        qualification_rules(study)
+        _validate_confirmation_rules(
+            study.get("decision_rules", {}).get("independent_confirmation")
+        )
     conditions = [name for name, value in study.get("fit_conditions", {}).items() if value]
     tasks = [
         name
@@ -115,6 +143,12 @@ def _validate_panel(study: dict[str, Any]) -> tuple[list[str], list[str]]:
     return conditions, tasks
 
 
+def _fit_tasks(study: dict[str, Any]) -> list[str]:
+    return [
+        name for name, spec in study.get("tasks", {}).items() if spec and spec.get("role") == "fit"
+    ]
+
+
 def _validate_pairing_rules(rules: Any) -> None:
     required = {
         "minimum_median_recovery",
@@ -132,6 +166,32 @@ def _validate_pairing_rules(rules: Any) -> None:
         )
     if type(rules["minimum_control_wins"]) is not int or rules["minimum_control_wins"] < 1:
         raise ConfigError("Pairing-specific control wins must be a positive integer.")
+
+
+def _validate_confirmation_rules(rules: Any) -> None:
+    required = {
+        "total_endpoints",
+        "minimum_endpoint_passes",
+        "require_each_task",
+        "require_each_model_pair",
+        "multiple_testing",
+        "familywise_alpha",
+    }
+    if not isinstance(rules, dict) or set(rules) != required:
+        raise ConfigError("Independent confirmation requires the complete global decision rule.")
+    total = rules["total_endpoints"]
+    passes = rules["minimum_endpoint_passes"]
+    alpha = rules["familywise_alpha"]
+    if type(total) is not int or type(passes) is not int or not 1 <= passes <= total:
+        raise ConfigError("Independent confirmation endpoint counts are invalid.")
+    if any(
+        type(rules[key]) is not bool for key in ("require_each_task", "require_each_model_pair")
+    ):
+        raise ConfigError("Independent confirmation coverage rules must be boolean.")
+    if rules["multiple_testing"] != "holm":
+        raise ConfigError("Independent confirmation requires Holm multiplicity control.")
+    if type(alpha) not in {int, float} or not 0 < alpha < 1:
+        raise ConfigError("Independent confirmation alpha must lie strictly between zero and one.")
 
 
 def _curve_rows(root: Path, study: dict[str, Any], task: str, condition: str):

@@ -230,6 +230,62 @@ def test_pairing_control_protocol_is_identical_across_model_pairs(study_name: st
     }
 
 
+@pytest.mark.parametrize(
+    "study_name",
+    [
+        "smollm_pairing_specific_independent_confirmation",
+        "olmo1_pairing_specific_independent_confirmation",
+    ],
+)
+def test_independent_confirmation_locks_fresh_tasks_and_99_nulls(study_name: str) -> None:
+    study = load_config(CONFIGS_DIR / "studies" / f"{study_name}.yaml")
+    conditions, tasks = _validate_panel(study)
+    assert conditions == ["probe_selected"]
+    assert tasks == ["qnli", "qqp"]
+    assert study["execution"]["prepare_materials"] is True
+
+    config = materialize_stage(select_task(study, "qnli", "probe_selected"), "align")
+    controls = config["alignment"]["task_adaptation"]["controls"]
+    assert controls["residual_shuffle_repeats"] == 99
+    assert controls["source_shuffle_repeats"] == 99
+    assert adaptation_method_count(config["alignment"]) == 200
+    assert config["expected_outputs"] == {
+        "metrics_rows": 816,
+        "prediction_rows": 1_632_000,
+        "recovery_rows": 808,
+        "alignment_diagnostic_rows": 808,
+        "alignment_selection_rows": 560,
+    }
+
+
+def test_independent_confirmation_protocol_matches_across_model_pairs() -> None:
+    studies = [
+        load_config(CONFIGS_DIR / "studies" / f"{name}.yaml")
+        for name in (
+            "smollm_pairing_specific_independent_confirmation",
+            "olmo1_pairing_specific_independent_confirmation",
+        )
+    ]
+    first, second = studies
+    assert (
+        first["decision_rules"]["independent_confirmation"]
+        == second["decision_rules"]["independent_confirmation"]
+    )
+    for task in ("qnli", "qqp"):
+        assert first["tasks"][task] == second["tasks"][task]
+
+
+def test_fresh_task_same_task_reference_excludes_the_adapter() -> None:
+    study = load_config(
+        CONFIGS_DIR / "studies/smollm_pairing_specific_independent_confirmation.yaml"
+    )
+    config = materialize_stage(select_task(study, "qnli"), "align")
+
+    assert "task_adaptation" not in config["alignment"]
+    assert config["alignment"]["primary_method"] == "affine_ridge"
+    assert config["alignment"]["negative_control"] == "shuffled_affine_ridge"
+
+
 def test_invalid_control_repeat_count_is_rejected() -> None:
     study = load_config(
         CONFIGS_DIR / "studies" / "smollm_pairing_specific_control_decomposition.yaml"

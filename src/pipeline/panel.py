@@ -44,6 +44,8 @@ def select_task(
         raise ConfigError("Reused material names must be complete semantic snake_case names.")
     for stage in ("transfer", "align"):
         stages[stage]["artifact_variant"] = f"{task.replace('_', '-')}-{stage}"
+    if fit is None:
+        _select_same_task_reference(configured)
     stages["align"]["materials"] = {
         "source_name": reuse.get(
             "transfer", stages["transfer"].get("name", f"{study['name']}_transfer")
@@ -61,6 +63,15 @@ def select_task(
     if fit is not None:
         _select_fit(study, configured, task, fit)
     return configured
+
+
+def _select_same_task_reference(configured: dict[str, Any]) -> None:
+    alignment = configured["pipeline"]["stages"]["align"]["alignment"]
+    adaptation = alignment.pop("task_adaptation", None)
+    if adaptation is None:
+        return
+    alignment["primary_method"] = adaptation["reference_method"]
+    alignment["negative_control"] = "shuffled_affine_ridge"
 
 
 def task_variants(study: dict[str, Any], stage: str) -> Iterator[dict[str, Any]]:
