@@ -13,6 +13,7 @@ from pipeline.config import materialize_stage
 from pipeline.materials import prepare_panel_materials
 from pipeline.panel import select_task
 from probe_transfer.alignment.contrasts import condition_contrasts, validate_contrasts
+from probe_transfer.alignment.control_decomposition import summarize_control_decomposition
 from probe_transfer.artifacts import write_jsonl
 from probe_transfer.layout import study_prefix
 from probe_transfer.publication import Publication, publish_artifacts
@@ -120,10 +121,15 @@ def _run_task(study, path, root, task, conditions) -> list[dict[str, Any]]:
                 check=True,
             )
         config = materialize_stage(select_task(study, task, condition), "align")
+        controls = config["alignment"].get("task_adaptation", {}).get("controls")
         rules = study["decision_rules"][
-            "pooled_compatibility"
-            if study["tasks"][task]["role"] == "fit"
-            else "pooled_generalization"
+            "pairing_specificity"
+            if controls is not None
+            else (
+                "pooled_compatibility"
+                if study["tasks"][task]["role"] == "fit"
+                else "pooled_generalization"
+            )
         ]
         result = summarize_alignment(output / "results", config, rules)
         outcomes.append({"task": task, "condition": condition, **result})
@@ -149,6 +155,27 @@ def summarize_alignment(
         and row["probe_family"] == alignment["primary_probe_family"]
         and row["pair_group"] == config["evaluation"]["primary_pair_group"]
     ]
+    controls = alignment.get("task_adaptation", {}).get("controls")
+    if controls is not None:
+        result = summarize_control_decomposition(primary, config, rules)
+    else:
+        result = _legacy_summary(primary, config, rules)
+    selected = [row for row in _read_rows(results / "alignment_selection.jsonl") if row["selected"]]
+    signatures = {}
+    for row in selected:
+        key = f"{row['data_seed']}/{row['source_model']}/{row['target_model']}/{row['depth']}/{row['method']}"
+        if key in signatures and signatures[key] != row["map_fingerprint"]:
+            raise ValueError("A selected map differs across fitting-task diagnostics.")
+        signatures[key] = row["map_fingerprint"]
+    if len(signatures) != len(config["data_seeds"]) * len(config["alignment"]["depths"]) * sum(
+        len(pairs) for pairs in config["evaluation"]["pair_groups"].values()
+    ) * (len([name for name in config["alignment"]["methods"] if name != "quotient_ridge"]) + 1):
+        raise ValueError("Selected map identity records are incomplete.")
+    return {**result, "map_fingerprints": signatures}
+
+
+def _legacy_summary(primary, config, rules) -> dict[str, Any]:
+    alignment = config["alignment"]
     aligned = [row for row in primary if row["method"] == alignment["primary_method"]]
     shuffled = [row for row in primary if row["method"] == alignment["negative_control"]]
     expected = {
@@ -177,18 +204,7 @@ def summarize_alignment(
         and result["substantial"] >= rules["minimum_substantial"]
         and result["shuffled_substantial"] <= rules["maximum_shuffled_substantial"]
     )
-    selected = [row for row in _read_rows(results / "alignment_selection.jsonl") if row["selected"]]
-    signatures = {}
-    for row in selected:
-        key = f"{row['data_seed']}/{row['source_model']}/{row['target_model']}/{row['depth']}/{row['method']}"
-        if key in signatures and signatures[key] != row["map_fingerprint"]:
-            raise ValueError("A selected map differs across fitting-task diagnostics.")
-        signatures[key] = row["map_fingerprint"]
-    if len(signatures) != len(config["data_seeds"]) * len(config["alignment"]["depths"]) * sum(
-        len(pairs) for pairs in config["evaluation"]["pair_groups"].values()
-    ) * (len([name for name in config["alignment"]["methods"] if name != "quotient_ridge"]) + 1):
-        raise ValueError("Selected map identity records are incomplete.")
-    return {**result, "map_fingerprints": signatures}
+    return result
 
 
 def eligible_conditions(comparisons, fit_tasks, conditions) -> list[str]:

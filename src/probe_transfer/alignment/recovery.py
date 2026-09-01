@@ -3,6 +3,8 @@ from typing import Any
 import numpy as np
 from sklearn.metrics import roc_auc_score
 
+from probe_transfer.alignment.task_adaptation import is_repeated_control
+
 
 def alignment_recovery_record(
     context: dict[str, Any],
@@ -22,12 +24,15 @@ def alignment_recovery_record(
     improvement = aligned_auroc - raw_auroc
     residual = oracle_auroc - aligned_auroc
     recovery = improvement / raw_gap if raw_gap > 0 else None
+    samples = evaluation["bootstrap_samples"]
+    if is_repeated_control(str(context.get("method", ""))):
+        samples = evaluation.get("control_bootstrap_samples", samples)
     intervals = _bootstrap_intervals(
         labels,
         oracle,
         raw,
         aligned,
-        samples=evaluation["bootstrap_samples"],
+        samples=samples,
         confidence=evaluation["confidence_level"],
         seed=bootstrap_seed,
     )

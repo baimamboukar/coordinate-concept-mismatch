@@ -43,6 +43,12 @@ def run_task_adaptation_panel(study: dict[str, Any], path: Path) -> None:
         )
     comparisons = [row for task_rows in outcomes for row in task_rows]
     _assert_shared_maps(comparisons)
+    decomposition = []
+    for comparison in comparisons:
+        for row in comparison.pop("control_decomposition", []):
+            decomposition.append(
+                {"task": comparison["task"], "condition": comparison["condition"], **row}
+            )
     curves = [
         row
         for task in tasks
@@ -62,15 +68,23 @@ def run_task_adaptation_panel(study: dict[str, Any], path: Path) -> None:
         ),
         "comparisons": comparisons,
         "curve_rows": len(curves),
+        "control_decomposition_rows": len(decomposition),
     }
     results = root / "results"
     results.mkdir(exist_ok=True)
     write_jsonl(results / "adaptation_curves.jsonl", curves)
+    if decomposition:
+        write_jsonl(results / "control_decomposition.jsonl", decomposition)
     (results / "summary.json").write_text(json.dumps(summary, indent=2, allow_nan=False) + "\n")
     config = materialize_stage(select_task(study, tasks[0], conditions[0]), "align")
     prefix = study_prefix(config["name"], config["study"])
     publish_artifacts(config, [Publication(results, f"{prefix}/results")], None)
-    _emit("panel_complete", comparisons=len(comparisons), curve_rows=len(curves))
+    _emit(
+        "panel_complete",
+        comparisons=len(comparisons),
+        curve_rows=len(curves),
+        control_decomposition_rows=len(decomposition),
+    )
 
 
 def _validate_panel(study: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -90,7 +104,34 @@ def _validate_panel(study: dict[str, Any]) -> tuple[list[str], list[str]]:
     ]
     if len(conditions) < 1 or len(tasks) < 1 or len(fit_tasks) < 2:
         raise ConfigError("Task adaptation requires shared-map fits and held-out tasks.")
+    if any(
+        materialize_stage(select_task(study, task, condition), "align")["alignment"]
+        .get("task_adaptation", {})
+        .get("controls")
+        for task in tasks
+        for condition in conditions
+    ):
+        _validate_pairing_rules(study.get("decision_rules", {}).get("pairing_specificity"))
     return conditions, tasks
+
+
+def _validate_pairing_rules(rules: Any) -> None:
+    required = {
+        "minimum_median_recovery",
+        "minimum_median_retention",
+        "minimum_median_paired_advantage",
+        "maximum_empirical_p",
+        "minimum_control_wins",
+    }
+    if not isinstance(rules, dict) or set(rules) != required:
+        raise ConfigError("Pairing specificity requires the complete locked decision rule.")
+    proportions = [rules[key] for key in required if key != "minimum_control_wins"]
+    if any(type(value) not in {int, float} or not 0 <= value <= 1 for value in proportions):
+        raise ConfigError(
+            "Pairing-specific thresholds must be numeric values between zero and one."
+        )
+    if type(rules["minimum_control_wins"]) is not int or rules["minimum_control_wins"] < 1:
+        raise ConfigError("Pairing-specific control wins must be a positive integer.")
 
 
 def _curve_rows(root: Path, study: dict[str, Any], task: str, condition: str):

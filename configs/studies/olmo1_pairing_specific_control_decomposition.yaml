@@ -1,0 +1,43 @@
+extends: olmo1_task_specific_low_rank_correction.yaml
+name: olmo1_pairing_specific_control_decomposition
+
+fit_conditions:
+  reconstruction_selected: null
+
+decision_rules:
+  pairing_specificity:
+    minimum_median_recovery: 0.50
+    minimum_median_retention: 0.75
+    minimum_median_paired_advantage: 0.10
+    maximum_empirical_p: 0.05
+    minimum_control_wins: 3
+  primary_condition: probe_selected
+  interpretation: diagnostic_pairing_specific_control_decomposition
+
+pipeline:
+  stages:
+    prepare:
+      name: pairing_specific_control_decomposition
+    preflight:
+      name: pairing_specific_control_decomposition
+    extract:
+      name: pairing_specific_control_decomposition
+    transfer:
+      name: pairing_specific_control_decomposition
+    align:
+      name: pairing_specific_control_decomposition
+      alignment:
+        primary_method: low_rank_r8_n256
+        negative_control: residual_shuffle_low_rank_r8_n256_rep00
+        task_adaptation:
+          calibration_rows: [256]
+          ranks: [8]
+          confirmatory_rows: 256
+          confirmatory_rank: 8
+          controls:
+            residual_shuffle_repeats: 20
+            source_shuffle_repeats: 20
+            moment_matching: coral
+            covariance_shrinkage: 0.10
+      evaluation:
+        control_bootstrap_samples: 200
